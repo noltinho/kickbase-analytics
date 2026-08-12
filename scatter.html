@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marktwert-Analyse — Kickbase Tools</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<style>
+  :root {
+    --bg:      #131417;
+    --surface: #1a1d21;
+    --border:  #2f363f;
+    --text:    #dee4ec;
+    --muted:   #7e8187;
+    --accent:  #ff4600;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+  }
+
+  /* ─── LAYOUT ──────────────────────────────────────────── */
+  .page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 20px 24px 16px;
+    gap: 12px;
+  }
+
+  /* ─── HEADER ──────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-shrink: 0;
+  }
+
+  .nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .nav a {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    border-radius: 5px;
+    transition: all .15s;
+  }
+  .nav a:hover { color: var(--text); border-color: var(--muted); }
+  .nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(22px, 3vw, 30px);
+    letter-spacing: 2px;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  h1 span { color: var(--accent); }
+
+  /* ─── CONTROLS ────────────────────────────────────────── */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .controls-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  .filter-block {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .filter-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-left: 2px;
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+  }
+
+  .btn {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn:hover:not(.active) { color: var(--text); }
+
+  .btn.active {
+    background: var(--accent);
+    color: #131417;
+    font-weight: 500;
+  }
+
+  .mv-range {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 10px;
+  }
+
+  .mv-range input {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    width: 48px;
+    outline: none;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .mv-range input::-webkit-outer-spin-button,
+  .mv-range input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+  .mv-range input::placeholder { color: var(--muted); }
+  .mv-range input:focus { color: var(--accent); }
+
+  .range-sep { color: var(--muted); font-size: 11px; user-select: none; }
+
+  .search-wrap { gap: 6px; }
+
+  .search-wrap input {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    width: 90px;
+    outline: none;
+  }
+
+  .search-wrap input::placeholder { color: var(--muted); }
+  .search-wrap input:focus { color: var(--accent); }
+
+  /* ─── TEAM FILTER ─────────────────────────────────────── */
+  .team-filter-wrap {
+    overflow: hidden;
+  }
+
+  .team-panel {
+    display: flex;
+    gap: 3px;
+    max-width: 0;
+    overflow: hidden;
+    transition: max-width 0.25s ease;
+  }
+
+  .team-panel.open {
+    max-width: 900px;
+  }
+
+  /* ─── SEARCH PANEL ───────────────────────────────────── */
+  #search-panel {
+    position: absolute;
+    top: 20px;
+    left: 90px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 10;
+    max-height: calc(100% - 80px);
+    overflow-y: auto;
+  }
+
+  .search-card {
+    background: rgba(19,20,23,0.92);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    min-width: 180px;
+  }
+
+  .search-card-name {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .search-card-team {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .search-card-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .search-card-row span:last-child { color: var(--text); }
+
+  .search-card-label {
+    margin-top: 5px;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ─── CLEANED LIST PANEL ─────────────────────────────── */
+  #cleaned-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 300px;
+    max-height: calc(100% - 80px);
+    background: rgba(19,20,23,0.95);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: none;
+    flex-direction: column;
+    z-index: 20;
+    overflow: hidden;
+  }
+
+  #cleaned-panel.open { display: flex; }
+
+  .cleaned-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .cleaned-panel-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .cleaned-panel-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    font-size: 14px;
+  }
+
+  .cleaned-panel-close:hover { color: var(--text); }
+
+  .cleaned-table {
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .cleaned-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 8px;
+    padding: 6px 14px;
+    border-bottom: 1px solid rgba(47,54,63,0.5);
+    align-items: baseline;
+  }
+
+  .cleaned-row:last-child { border-bottom: none; }
+
+  .cleaned-name {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cleaned-team {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+
+  .cleaned-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .cleaned-delta {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: #25dc84;
+    text-align: right;
+  }
+
+  /* ─── CHART WRAP ──────────────────────────────────────── */
+  .chart-wrap {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+  }
+
+  #chart {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ─── X-ACHSE TOGGLE (overlay) ───────────────────────── */
+  .x-toggle {
+    position: absolute;
+    bottom: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    pointer-events: auto;
+  }
+
+  /* ─── R² BADGE ────────────────────────────────────────── */
+  #r2-badge {
+    position: absolute;
+    top: 56px;
+    right: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  /* ─── ERROR ───────────────────────────────────────────── */
+  .error {
+    color: #f87171;
+    font-size: 14px;
+    padding: 20px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nav a, .btn { transition: none; }
+  }
+
+  @media (max-width: 600px) {
+    .page { padding: 14px 16px 12px; gap: 10px; }
+    .btn { padding: 6px 12px; font-size: 10px; }
+    header { flex-wrap: wrap; gap: 12px; }
+    .nav { gap: 4px; }
+    .nav a { font-size: 9px; padding: 8px 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>Marktwert<span>Analyse</span></h1>
+    <nav class="nav">
+      <a href="index.html">Homepage</a>
+      <a href="teampunkte.html">Punkte pro Team</a>
+      <a href="matchup.html">Zugelassene Punkte</a>
+      <a href="score.html">Matchup-Ranking</a>
+      <a href="scores-edit.html">Teamst&auml;rke</a>
+    </nav>
+  </header>
+
+  <div class="controls">
+    <div class="controls-row">
+      <div class="filter-block">
+        <span class="filter-label">Position</span>
+        <div class="btn-group">
+          <button class="btn"        onclick="togglePos('Tor')"        id="pos-tor">Tor</button>
+          <button class="btn active" onclick="togglePos('Abwehr')"     id="pos-abw">Abwehr</button>
+          <button class="btn active" onclick="togglePos('Mittelfeld')" id="pos-mit">Mittelfeld</button>
+          <button class="btn active" onclick="togglePos('Sturm')"      id="pos-stu">Sturm</button>
+        </div>
+      </div>
+      <div class="filter-block">
+        <span class="filter-label">Min. Einsätze</span>
+        <div class="mv-range">
+          <input type="number" id="min-apps" value="6" min="0" max="34" step="1" oninput="setApps()" style="width:100%">
+        </div>
+      </div>
+      <div class="filter-block">
+        <span class="filter-label">Marktwert (Mio €)</span>
+        <div class="mv-range">
+          <input type="number" id="mv-min" value="2" min="0" step="0.5" oninput="setMv()">
+          <span class="range-sep">–</span>
+          <input type="number" id="mv-max" placeholder="Max" min="0" step="0.5" oninput="setMv()">
+        </div>
+      </div>
+      <div class="filter-block">
+        <span class="filter-label">Bereinigt</span>
+        <div class="btn-group">
+          <button class="btn" id="cleaned-trigger" onclick="toggleCleanedPanel()">—</button>
+        </div>
+      </div>
+    </div>
+    <div class="controls-row">
+      <div class="filter-block">
+        <span class="filter-label">Spieler</span>
+        <div class="mv-range search-wrap">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-input" placeholder="Name…" oninput="setSearch()" autocomplete="off">
+        </div>
+      </div>
+      <div class="filter-block">
+        <span class="filter-label">Teams</span>
+        <div class="btn-group team-filter-wrap">
+          <button class="btn active" id="team-trigger" onclick="toggleTeamPanel()">ALLE</button>
+          <div class="team-panel" id="team-panel"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-wrap">
+    <div id="chart"></div>
+    <div id="search-panel"></div>
+    <div id="cleaned-panel">
+      <div class="cleaned-panel-head">
+        <span class="cleaned-panel-title">Bereinigte Spieler</span>
+        <button class="cleaned-panel-close" onclick="toggleCleanedPanel()">✕</button>
+      </div>
+      <div class="cleaned-table" id="cleaned-table"></div>
+    </div>
+    <div class="x-toggle">
+      <div class="btn-group">
+        <button class="btn active" onclick="setX('avg')"   id="btn-avg">Ø Punkte</button>
+        <button class="btn"        onclick="setX('total')" id="btn-total">Ø Bereinigt</button>
+      </div>
+    </div>
+    <div id="r2-badge"></div>
+  </div>
+
+</div>
+<script>
+const POSITION_LABEL = { 1: 'Tor', 2: 'Abwehr', 3: 'Mittelfeld', 4: 'Sturm' };
+const TREND_LABEL    = { 0: '=', 1: '↓', 2: '↑' };
+const SYMBOL         = { 'Bundesliga': 'circle', '2. Bundesliga': 'diamond' };
+
+const liga    = localStorage.getItem('kickbase_liga') || '1';
+/* Diese Seite hat kein Saison-Feld. Sie las früher den gemeinsamen Schlüssel
+   der anderen Tools mit; seit die Saisonwahl je Seite gespeichert wird, gibt es
+   den nicht mehr zu erben. Bleibt der Parameter aus der URL — sonst die
+   laufende Saison. */
+const season  = new URLSearchParams(location.search).get('season') || '';
+/* Saison-Manifest: data/seasons.json ist die einzige Stelle, an der eine
+   Saison eingetragen wird — fetch.py und alle Seiten lesen sie. Der leere
+   Schlüssel '' meint die laufende Saison (Dateien ohne Suffix). */
+let SEASONS = null;
+function seasonInfo(key) {
+  return SEASONS.seasons.find(s => s.key === key)
+      || SEASONS.seasons.find(s => s.key === SEASONS.current);
+}
+const COMP_NAME = { '1': 'Bundesliga', '2': '2. Bundesliga' };
+
+let xMode       = 'avg';
+let posFilter   = new Set(['Abwehr', 'Mittelfeld', 'Sturm']);
+let mvMin       = 2e6;
+let mvMax       = Infinity;
+let minApps     = 6;
+let teamFilter  = new Set();
+let teamPanelOpen = false;
+let searchQuery = '';
+let ALL_PLAYERS = [];
+
+// ─── Statistik-Hilfsfunktionen ─────────────────────────────
+
+// Gewichtetes OLS — ws optional (null = ungewichtet)
+function olsW(xs, ys, ws) {
+  const n = xs.length;
+  if (n < 2) return null;
+  const W  = ws ? ws.reduce((a, b) => a + b) : n;
+  const xm = ws ? xs.reduce((s, x, i) => s + ws[i] * x, 0) / W : xs.reduce((a, b) => a + b) / n;
+  const ym = ws ? ys.reduce((s, y, i) => s + ws[i] * y, 0) / W : ys.reduce((a, b) => a + b) / n;
+  const w  = (i) => ws ? ws[i] : 1;
+  const slope     = xs.reduce((s, x, i) => s + w(i) * (x - xm) * (ys[i] - ym), 0)
+                  / xs.reduce((s, x, i) => s + w(i) * (x - xm) ** 2, 0);
+  const intercept = ym - slope * xm;
+  const yHat  = xs.map(x => slope * x + intercept);
+  return { slope, intercept, yHat };
+}
+
+function computeR2(ys, yHat) {
+  const ym    = ys.reduce((a, b) => a + b) / ys.length;
+  const ssTot = ys.reduce((s, y)    => s + (y - ym) ** 2, 0);
+  const ssRes = ys.reduce((s, y, i) => s + (y - yHat[i]) ** 2, 0);
+  return 1 - ssRes / ssTot;
+}
+
+function stdDev(arr) {
+  const m = arr.reduce((a, b) => a + b) / arr.length;
+  return Math.sqrt(arr.reduce((s, x) => s + (x - m) ** 2, 0) / arr.length) || 1;
+}
+
+// ─── Filter ────────────────────────────────────────────────
+function getFiltered() {
+  return ALL_PLAYERS.filter(p =>
+    posFilter.has(p.position) &&
+    p.mv >= mvMin &&
+    p.mv <= mvMax &&
+    p.appearances >= minApps &&
+    teamFilter.has(p.team)
+  );
+}
+
+function fmt(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(2).replace('.', ',') + ' Mio €';
+  return n.toLocaleString('de-DE') + ' €';
+}
+
+function fmtDev(n) {
+  const sign = n >= 0 ? '+' : '';
+  return sign + (n / 1e6).toFixed(2).replace('.', ',') + ' Mio';
+}
+
+// ─── Datenverarbeitung ─────────────────────────────────────
+function processPlayers(raw, competition) {
+  const days = new Set();
+  raw.players.forEach(p => (p.performance || []).forEach(e => days.add(e.day)));
+  const currentDay = days.size ? Math.max(...days) : 34;
+
+  return raw.players
+    .filter(p => p.market_value?.current)
+    .map(p => {
+      const perf        = p.performance || [];
+      const mins        = e => parseInt(e.minutes);
+      const played      = perf.filter(e => mins(e) > 0);
+      const appearances = played.length;
+      const total_pts   = perf.reduce((s, e) => s + (e.points || 0), 0);
+      const avg_pts     = appearances ? Math.round((total_pts / appearances) * 10) / 10 : 0;
+
+      // Bereinigte Ø Punkte: Kurzeinsätze (<40 Min) entfernen,
+      // aber nur wenn Spieler aktueller Stammspieler ist
+      // (≥4 der letzten 5 Einsätze mit ≥60 Min, letzter Einsatz max. 8 Spieltage her)
+      const last5      = [...played].sort((a, b) => b.day - a.day).slice(0, 5);
+      const isStarter  = last5.length === 5
+                      && last5.filter(e => mins(e) >= 60).length >= 4
+                      && last5[0].day >= currentDay - 8;
+      const useForClean = isStarter ? perf.filter(e => mins(e) >= 40) : played;
+      const cleaned_raw = useForClean.length
+        ? Math.round(useForClean.reduce((s, e) => s + (e.points || 0), 0) / useForClean.length * 10) / 10
+        : avg_pts;
+      const cleaned_avg_pts = cleaned_raw > avg_pts ? cleaned_raw : avg_pts;
+
+      const mv_obj = p.market_value;
+      return {
+        name: p.name, team: p.team_name,
+        position: POSITION_LABEL[p.position] || '?',
+        mv: mv_obj.current,
+        mv_trend: TREND_LABEL[mv_obj.trend] ?? '=',
+        total_pts, avg_pts, cleaned_avg_pts, appearances, competition,
+      };
+    });
+}
+
+// ─── Traces ────────────────────────────────────────────────
+function buildTraces(players, combined, regAvg, regCleaned) {
+  const activeReg = xMode === 'total' ? regCleaned : regAvg;
+  const xVal = p => xMode === 'total' ? p.cleaned_avg_pts : p.avg_pts;
+  const xs = players.map(xVal);
+
+  // Spieler-Traces: gruppiert nach Liga, Farbe = combined score
+  const groups = {};
+  players.forEach((p, i) => (groups[p.competition] ??= []).push({ p, i }));
+
+  const hasSearch = searchQuery.length >= 2;
+
+  const traces = Object.entries(groups).map(([comp, items]) => ({
+    type: 'scatter',
+    mode: 'markers',
+    name: comp,
+    x: items.map(({ p }) => xVal(p)),
+    y: items.map(({ p }) => p.mv),
+    text: items.map(({ p, i }) => {
+      const c = combined[i];
+      const modellwert = activeReg.yHat[i];
+      const delta = modellwert - p.mv;
+      const label = c < -1.0 ? '<span style="color:#25dc84">Unterbewertet</span>'
+                  : c < -0.5 ? '<span style="color:#7acca0">Leicht unterbewertet</span>'
+                  : c >  1.0 ? '<span style="color:#ff4600">Überbewertet</span>'
+                  : c >  0.5 ? '<span style="color:#cc8060">Leicht überbewertet</span>'
+                  :             '<span style="color:#7e8187">Fair bewertet</span>';
+      return `<b style="color:#dee4ec">${p.name}</b>  <span style="color:#7e8187">${p.team}</span><br>` +
+        `<span style="color:#7e8187">Position</span>  ${p.position}` +
+        `  <span style="color:#7e8187">Einsätze</span>  ${p.appearances}<br>` +
+        `<span style="color:#7e8187">Marktwert</span>  ${fmt(p.mv)} ${p.mv_trend}<br>` +
+        `<span style="color:#7e8187">Modellwert</span>  ${fmt(modellwert)}  <span style="color:${delta > 0 ? '#25dc84' : '#ff4600'}">${fmtDev(delta)}</span><br>` +
+        `<span style="color:#7e8187">Ø Punkte</span>  ${p.avg_pts} Pkt<br>` +
+        `<span style="color:#7e8187">Ø Bereinigt</span>  ${p.cleaned_avg_pts} Pkt<br>` +
+        label;
+    }),
+    hovertemplate: '%{text}<extra></extra>',
+    marker: {
+      color:      items.map(({ i }) => combined[i]),
+      colorscale: [[0,'#25dc84'],[0.25,'#7acca0'],[0.5,'#7e8187'],[0.75,'#cc8060'],[1,'#ff4600']],
+      cmin: -2, cmax: 2,
+      showscale: false,
+      size: 7,
+      opacity: hasSearch ? 0.2 : 0.85,
+      symbol: SYMBOL[comp] || 'circle',
+      line: { width: 0.5, color: '#131417' },
+    },
+  }));
+
+  // Highlight-Trace für Suchergebnisse
+  if (hasSearch) {
+    const hits = players.filter(p => p.name.toLowerCase().includes(searchQuery));
+    if (hits.length) {
+      const hitIdx = hits.map(p => players.indexOf(p));
+      traces.push({
+        type: 'scatter', mode: 'markers+text',
+        x: hits.map(p => xMode === 'total' ? p.cleaned_avg_pts : p.avg_pts),
+        y: hits.map(p => p.mv),
+        text: hits.map(p => p.name),
+        textposition: 'top center',
+        textfont: { color: '#dee4ec', size: 11, family: "'DM Sans', sans-serif" },
+        marker: {
+          size: 11,
+          color: hitIdx.map(i => combined[i]),
+          colorscale: [[0,'#25dc84'],[0.25,'#7acca0'],[0.5,'#7e8187'],[0.75,'#cc8060'],[1,'#ff4600']],
+          cmin: -2, cmax: 2,
+          symbol: hits.map(p => SYMBOL[p.competition] || 'circle'),
+          line: { width: 2, color: '#dee4ec' },
+        },
+        hoverinfo: 'skip', showlegend: false,
+      });
+    }
+  }
+
+  // Regressionsgerade (nur wenn genug Datenpunkte)
+  if (activeReg) {
+    const xMin = Math.min(...xs), xMax = Math.max(...xs);
+    traces.push({
+      type: 'scatter', mode: 'lines',
+      x: [xMin, xMax],
+      y: [activeReg.slope * xMin + activeReg.intercept,
+          activeReg.slope * xMax + activeReg.intercept],
+      line: { color: 'rgba(222,228,236,0.2)', width: 1.5, dash: 'dot' },
+      hoverinfo: 'skip', showlegend: false,
+    });
+  }
+
+  return traces;
+}
+
+// ─── Layout & Config ───────────────────────────────────────
+const layout = {
+  paper_bgcolor: '#131417',
+  plot_bgcolor:  '#131417',
+  font: { color: '#7e8187', size: 11, family: "'DM Mono', monospace" },
+  xaxis: {
+    title: { text: '' },
+    gridcolor: '#2f363f', zerolinecolor: '#2f363f',
+    tickfont: { size: 10 }, linecolor: '#2f363f',
+  },
+  yaxis: {
+    title: { text: 'MARKTWERT (€)', font: { size: 11, color: '#7e8187' }, standoff: 10 },
+    gridcolor: '#2f363f', zerolinecolor: '#2f363f',
+    tickformat: ',.0f', tickfont: { size: 10 }, linecolor: '#2f363f',
+  },
+  legend: {
+    bgcolor: '#131417', bordercolor: '#2f363f', borderwidth: 1,
+    font: { color: '#dee4ec', size: 11, family: "'DM Mono', monospace" },
+  },
+  margin: { t: 20, r: 20, b: 64, l: 84 },
+  hoverlabel: {
+    bgcolor: '#0d0e11', bordercolor: '#2f363f',
+    font: { size: 12, color: '#dee4ec', family: "'DM Sans', sans-serif" },
+    align: 'left',
+  },
+};
+
+const config = {
+  responsive: true, displaylogo: false,
+  modeBarButtonsToRemove: ['select2d', 'lasso2d', 'toImage'],
+};
+
+// ─── Render ────────────────────────────────────────────────
+function render() {
+  const players = getFiltered();
+
+  let regAvg = null, regCleaned = null;
+  let combined = players.map(() => 0);
+
+  if (players.length >= 3) {
+    const mvs     = players.map(p => p.mv);
+    const avgs    = players.map(p => p.avg_pts);
+    const cleaned = players.map(p => p.cleaned_avg_pts);
+    const weights = players.map(p => Math.sqrt(p.appearances));
+
+    // Pass 1: Avg-Regression zum Finden negativer Ausreißer
+    const p1A = olsW(avgs, mvs, weights);
+    const r1A = players.map((_, i) => mvs[i] - p1A.yHat[i]);
+    const s1A = stdDev(r1A);
+
+    // Nur untere Ausreißer entfernen (hohe Avg-Punkte, niedriger MV = verletzt/transferiert)
+    const THRESH = -2.0;
+    const keep = players.map((_, i) => r1A[i] / s1A >= THRESH);
+    const cA  = avgs.filter(   (_, i) => keep[i]);
+    const cC  = cleaned.filter((_, i) => keep[i]);
+    const cM  = mvs.filter(    (_, i) => keep[i]);
+    const cW  = weights.filter((_, i) => keep[i]);
+
+    // Pass 2: saubere Regression auf bereinigtem Datensatz
+    const fitA = olsW(cA, cM, cW);
+    const fitC = olsW(cC, cM, cW);
+
+    // Auf ALLE Spieler anwenden (Ausreißer bleiben im Chart sichtbar)
+    const yHatA = avgs.map(   x => fitA.slope * x + fitA.intercept);
+    const yHatC = cleaned.map(x => fitC.slope * x + fitC.intercept);
+
+    regAvg     = { slope: fitA.slope, intercept: fitA.intercept, yHat: yHatA, r2: computeR2(cM, fitA.yHat) };
+    regCleaned = { slope: fitC.slope, intercept: fitC.intercept, yHat: yHatC, r2: computeR2(cM, fitC.yHat) };
+
+    // Farbe & Score nach aktiver X-Achse
+    const activeYHat = xMode === 'total' ? yHatC : yHatA;
+    const activeRes  = players.map((_, i) => mvs[i] - activeYHat[i]);
+    const sdActive   = stdDev(activeRes);
+    combined = players.map((_, i) => activeRes[i] / sdActive);
+
+    document.getElementById('r2-badge').textContent =
+      `R² ${(xMode === 'total' ? regCleaned : regAvg).r2.toFixed(3)}`;
+  } else {
+    document.getElementById('r2-badge').textContent = '';
+  }
+
+  const activeReg = xMode === 'total' ? regCleaned : regAvg;
+  updateSearchPanel(players, combined, activeReg);
+  Plotly.react('chart', buildTraces(players, combined, regAvg, regCleaned), layout, config);
+}
+
+// ─── Event-Handler ─────────────────────────────────────────
+function setX(mode) {
+  xMode = mode;
+  document.getElementById('btn-total').classList.toggle('active', mode === 'total');
+  document.getElementById('btn-avg').classList.toggle('active', mode === 'avg');
+  render();
+}
+
+function togglePos(pos) {
+  if (posFilter.has(pos)) {
+    if (posFilter.size > 1) posFilter.delete(pos);
+  } else {
+    posFilter.add(pos);
+  }
+  const ids = { 'Tor': 'pos-tor', 'Abwehr': 'pos-abw', 'Mittelfeld': 'pos-mit', 'Sturm': 'pos-stu' };
+  document.getElementById(ids[pos]).classList.toggle('active', posFilter.has(pos));
+  render();
+}
+
+function setApps() {
+  const v = parseInt(document.getElementById('min-apps').value);
+  minApps = isNaN(v) ? 0 : v;
+  render();
+}
+
+function setMv() {
+  const minVal = parseFloat(document.getElementById('mv-min').value);
+  const maxVal = parseFloat(document.getElementById('mv-max').value);
+  mvMin = isNaN(minVal) ? 0        : minVal * 1e6;
+  mvMax = isNaN(maxVal) ? Infinity : maxVal * 1e6;
+  render();
+}
+
+function setSearch() {
+  searchQuery = document.getElementById('search-input').value.trim().toLowerCase();
+  render();
+}
+
+function updateSearchPanel(players, combined, regAvg) {
+  const panel = document.getElementById('search-panel');
+  if (searchQuery.length < 2) { panel.innerHTML = ''; return; }
+
+  const hits = players.map((p, i) => ({ p, i }))
+    .filter(({ p }) => p.name.toLowerCase().includes(searchQuery));
+
+  if (!hits.length) { panel.innerHTML = '<div class="search-card"><div class="search-card-team">Keine Treffer</div></div>'; return; }
+
+  panel.innerHTML = hits.map(({ p, i }) => {
+    const modellwert = regAvg.yHat[i];
+    const delta      = modellwert - p.mv;
+    const c          = combined[i];
+    const labelText  = c < -1.0 ? 'Unterbewertet'
+                     : c < -0.5 ? 'Leicht unterbewertet'
+                     : c >  1.0 ? 'Überbewertet'
+                     : c >  0.5 ? 'Leicht überbewertet'
+                     :            'Fair bewertet';
+    const labelColor = c < -1.0 ? '#25dc84' : c < -0.5 ? '#7acca0'
+                     : c >  1.0 ? '#ff4600' : c >  0.5 ? '#cc8060' : '#7e8187';
+    const deltaColor = delta > 0 ? '#25dc84' : '#ff4600';
+    return `<div class="search-card">
+      <div class="search-card-name">${p.name}</div>
+      <div class="search-card-team">${p.team} · ${p.position}</div>
+      <div class="search-card-row"><span>Einsätze</span><span>${p.appearances}</span></div>
+      <div class="search-card-row"><span>Marktwert</span><span>${fmt(p.mv)} ${p.mv_trend}</span></div>
+      <div class="search-card-row"><span>Modellwert</span><span>${fmt(modellwert)} <span style="color:${deltaColor}">${fmtDev(delta)}</span></span></div>
+      <div class="search-card-row"><span>Ø Punkte</span><span>${p.avg_pts}</span></div>
+      <div class="search-card-row"><span>Ø Bereinigt</span><span>${p.cleaned_avg_pts}</span></div>
+      <div class="search-card-label" style="color:${labelColor}">${labelText}</div>
+    </div>`;
+  }).join('');
+}
+
+let cleanedPanelOpen = false;
+
+function buildCleanedList() {
+  const list = ALL_PLAYERS
+    .filter(p => p.cleaned_avg_pts !== p.avg_pts)
+    .sort((a, b) => (b.cleaned_avg_pts - b.avg_pts) - (a.cleaned_avg_pts - a.avg_pts));
+
+  const btn = document.getElementById('cleaned-trigger');
+  btn.textContent = list.length;
+
+  document.getElementById('cleaned-table').innerHTML = list.map(p => {
+    const delta = (p.cleaned_avg_pts - p.avg_pts).toFixed(1);
+    return `<div class="cleaned-row">
+      <div>
+        <div class="cleaned-name">${p.name}</div>
+        <div class="cleaned-team">${p.team}</div>
+      </div>
+      <div class="cleaned-val">${p.avg_pts}</div>
+      <div class="cleaned-val">${p.cleaned_avg_pts}</div>
+      <div class="cleaned-delta">+${delta}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCleanedPanel() {
+  cleanedPanelOpen = !cleanedPanelOpen;
+  document.getElementById('cleaned-panel').classList.toggle('open', cleanedPanelOpen);
+  document.getElementById('cleaned-trigger').classList.toggle('active', cleanedPanelOpen);
+}
+
+function buildTeamButtons() {
+  const teams = [...new Set(ALL_PLAYERS.map(p => p.team))].sort();
+  teamFilter = new Set(teams);
+  document.getElementById('team-panel').innerHTML = teams.map(t =>
+    `<button class="btn active" id="team-${t}" onclick="toggleTeam('${t}')">${t}</button>`
+  ).join('');
+}
+
+function toggleTeamPanel() {
+  teamPanelOpen = !teamPanelOpen;
+  document.getElementById('team-panel').classList.toggle('open', teamPanelOpen);
+}
+
+function toggleTeam(team) {
+  const allTeams = [...document.querySelectorAll('#team-panel .btn')].map(b => b.id.replace('team-', ''));
+  if (teamFilter.size === allTeams.length) {
+    // alle aktiv → nur dieses
+    teamFilter = new Set([team]);
+  } else if (teamFilter.has(team)) {
+    if (teamFilter.size > 1) teamFilter.delete(team);
+  } else {
+    teamFilter.add(team);
+  }
+  allTeams.forEach(t => document.getElementById(`team-${t}`).classList.toggle('active', teamFilter.has(t)));
+  updateTeamTrigger();
+  render();
+}
+
+function updateTeamTrigger() {
+  const total = document.querySelectorAll('#team-panel .btn').length;
+  const btn = document.getElementById('team-trigger');
+  if (teamFilter.size === total) {
+    btn.textContent = 'ALLE';
+    btn.classList.add('active');
+  } else {
+    btn.textContent = `${teamFilter.size}/${total}`;
+    btn.classList.remove('active');
+  }
+}
+
+// ─── Daten laden ───────────────────────────────────────────
+fetch('data/seasons.json')
+  .then(r => r.json())
+  .then(manifest => {
+    SEASONS = manifest;
+    return fetch(`data/data_${liga}${seasonInfo(season).suffix}.json`);
+  })
+  .then(r => r.json())
+  .then(data => {
+    ALL_PLAYERS = processPlayers(data, COMP_NAME[liga]);
+    buildTeamButtons();
+    buildCleanedList();
+    render();
+  }).catch(err => {
+    document.getElementById('chart').innerHTML =
+      `<p class="error">Fehler beim Laden der Daten: ${err.message}</p>`;
+  });
+</script>
+</body>
+</html>

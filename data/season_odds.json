@@ -1,0 +1,110 @@
+{
+ "_hinweis": "Saison-Ausgangsquoten, von Hand gepflegt. Werte sind Dezimalquoten. 'spots' = Zahl der Plaetze, auf die sich der Markt bezieht. Eine Liga kann mehrere Maerkte fuehren; 'partial' markiert einen, der nicht alle Teams nennt und sich deshalb nicht selbst normieren kann - er uebernimmt den Margen-Exponenten des ersten vollstaendigen Marktes.",
+ "leagues": {
+  "1": {
+   "market": "Top 6 und Meister",
+   "source": "Buchmacher-Ausgangsquoten, Stand 2026-08-11",
+   "markets": [
+    {
+     "name": "Top 6",
+     "spots": 6,
+     "_overround": "Summe der rohen 1/Quote = 6,679 bei 6 Plaetzen, also 11,3 % Marge - deutlich sauberer als der Aufstiegsmarkt der Liga 2 mit 43,8 %.",
+     "teams": {
+      "2": 1.00,
+      "3": 1.05,
+      "43": 1.12,
+      "7": 1.17,
+      "9": 1.40,
+      "4": 2.00,
+      "14": 2.80,
+      "5": 3.50,
+      "18": 4.50,
+      "15": 8.00,
+      "13": 8.00,
+      "10": 8.00,
+      "8": 8.00,
+      "28": 10.00,
+      "6": 10.00,
+      "40": 10.00,
+      "29": 20.00,
+      "77": 20.00
+     }
+    },
+    {
+     "name": "Meister",
+     "spots": 1,
+     "partial": true,
+     "_grund": "Bayern steht im Top-6-Markt bei 1,00. Das heisst nur 'sicher' und sagt nichts darueber, wie viel staerker sie sind - erst diese Quote pinnt ihr Niveau fest.",
+     "teams": {
+      "2": 1.12
+     }
+    }
+   ],
+   "names": {
+    "2": "FC Bayern Muenchen",
+    "3": "Borussia Dortmund",
+    "43": "RB Leipzig",
+    "7": "Bayer Leverkusen",
+    "9": "VfB Stuttgart",
+    "4": "Eintracht Frankfurt",
+    "14": "TSG Hoffenheim",
+    "5": "SC Freiburg",
+    "18": "1. FSV Mainz 05",
+    "15": "Borussia Moenchengladbach",
+    "13": "FC Augsburg",
+    "10": "SV Werder Bremen",
+    "8": "Schalke 04",
+    "28": "1. FC Koeln",
+    "6": "Hamburger SV",
+    "40": "Union Berlin",
+    "29": "SC Paderborn 07",
+    "77": "SV 07 Elversberg"
+   }
+  },
+  "2": {
+   "market": "Aufstieg",
+   "spots": 2,
+   "source": "Buchmacher-Ausgangsquoten, Stand 2026-08-11",
+   "teams": {
+    "11": 1.45,
+    "50": 3.75,
+    "17": 3.75,
+    "16": 4.40,
+    "39": 4.40,
+    "20": 6.00,
+    "30": 7.00,
+    "41": 7.50,
+    "51": 8.00,
+    "42": 9.00,
+    "24": 10.00,
+    "27": 11.00,
+    "48": 13.00,
+    "19": 17.00,
+    "22": 17.00,
+    "21": 17.00,
+    "138": 21.00,
+    "76": 35.00
+   },
+   "names": {
+    "11": "VfL Wolfsburg",
+    "50": "1. FC Heidenheim 1846",
+    "17": "Hannover 96",
+    "16": "1. FC Nuernberg",
+    "39": "FC St. Pauli",
+    "20": "Hertha BSC",
+    "30": "1. FC Kaiserslautern",
+    "41": "SG Dynamo Dresden",
+    "51": "Holstein Kiel",
+    "42": "SV Darmstadt 98",
+    "24": "VfL Bochum",
+    "27": "Karlsruher SC",
+    "48": "1. FC Magdeburg",
+    "19": "SpVgg Greuther Fuerth",
+    "22": "Arminia Bielefeld",
+    "21": "Eintracht Braunschweig",
+    "138": "Energie Cottbus",
+    "76": "VfL 1899 Osnabrueck"
+   }
+  }
+ }
+}

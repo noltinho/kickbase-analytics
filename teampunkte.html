@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kickbase · Punkte pro Team</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #131417;
+      --surface: #1a1d21;
+      --surface2: #21252a;
+      --border: #2f363f;
+      --text: #dee4ec;
+      --muted: #7e8187;
+      --accent: #ff4600;
+      --accent2: #ff5f3a;
+      --accent3: #3ab8ff;
+      --tw: #3ab8ff;
+      --abw: #5dde84;
+      --mit: #f5a623;
+      --stu: #ff5f3a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { overscroll-behavior-x: none; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      overflow-x: hidden;
+      overscroll-behavior-x: none;
+    }
+
+    /* ─── HEADER ─────────────────────────────────────── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      position: sticky;
+      top: 0;
+      background: rgba(19, 20, 23, 0.92);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+    }
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 26px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .logo span { color: var(--muted); font-size: 14px; display: block; letter-spacing: 3px; }
+    .header-meta {
+      margin-left: 24px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      line-height: 1.8;
+    }
+    #generated-at { color: var(--text); }
+    .nav {
+      display: flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+    .nav a {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      text-decoration: none;
+      color: var(--muted);
+      padding: 10px 14px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      transition: all .15s;
+    }
+    .nav a:hover { color: var(--text); border-color: var(--border); }
+    .nav a.active { color: #131417; background: var(--accent); border-color: var(--accent); font-weight: 500; }
+    .nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ─── LAYOUT ─────────────────────────────────────── */
+    .wrapper {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+
+    /* ─── FILTER BAR ─────────────────────────────────── */
+    .filter-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr auto;
+      gap: 12px;
+      margin-bottom: 32px;
+      align-items: end;
+    }
+    .toggle-group { display: flex; gap: 6px; }
+    .toggle-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      padding: 10px 14px;
+      min-height: 40px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .toggle-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #131417;
+      font-weight: 500;
+    }
+    .toggle-btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+    .toggle-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .filter-group label {
+      display: block;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .filter-group select { width: 100%; }
+    .day-range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .day-range-wrap input[type="number"] {
+      width: 60px;
+      flex-shrink: 0;
+    }
+    .day-range-sep {
+      color: var(--muted);
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    input[type="number"] {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      padding: 9px 10px;
+      border-radius: 6px;
+      outline: none;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type="number"]:hover,
+    input[type="number"]:focus { border-color: var(--accent); }
+    select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      padding: 9px 12px;
+      border-radius: 6px;
+      outline: none;
+      cursor: pointer;
+      transition: border-color .2s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237e8187'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+    select:hover, select:focus { border-color: var(--accent); }
+
+    /* ─── STATS ROW ──────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+    .stat-card:nth-child(2)::before { background: var(--accent2); }
+    .stat-card:nth-child(3)::before { background: var(--accent3); }
+    .stat-card:nth-child(4)::before { background: #b45fff; }
+    .stat-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 36px;
+      letter-spacing: 1px;
+      line-height: 1;
+    }
+    .stat-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ─── CHART AREA ─────────────────────────────────── */
+    .chart-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px 28px;
+      margin-bottom: 28px;
+    }
+    .chart-header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .chart-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 2px;
+      color: var(--text);
+    }
+    .chart-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+    }
+
+    /* ─── POS LEGEND ─────────────────────────────────── */
+    .pos-legend {
+      display: flex;
+      gap: 18px;
+      margin-left: auto;
+    }
+    .pos-dot {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .pos-dot::before {
+      content: '';
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      background: var(--c);
+    }
+
+    /* ─── BÄNDER-GRID ────────────────────────────────── */
+    .bands-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 4px;
+    }
+    .bands-grid {
+      display: grid;
+      gap: 4px;
+      align-items: stretch;
+    }
+    /* Positions-Beschriftung links (bleibt beim Scrollen stehen) */
+    .band-label {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--c);
+    }
+    /* Fester Abschnitt je Position — immer gleich hoch, unterschiedlich stark gefüllt */
+    .band {
+      position: relative;
+      height: 46px;
+      border-radius: 4px;
+      background: var(--ct);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      cursor: default;
+    }
+    .band-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      background: var(--c);
+      opacity: .8;
+      border-radius: 3px 0 0 3px;
+      transition: width .35s ease;
+    }
+    /* Dünner Marker beim Ligadurchschnitt dieser Position */
+    .band-avg {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 1px;
+      background: rgba(222, 228, 236, .45);
+    }
+    .band-rank {
+      position: absolute;
+      right: 7px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      text-shadow: 0 0 4px var(--bg), 0 0 3px var(--bg), 0 0 2px var(--bg);
+      pointer-events: none;
+    }
+    .band:hover { border-color: var(--c); }
+    /* Fußzeile: Tabellenplatz + Team */
+    .band-foot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding-top: 8px;
+      cursor: default;
+    }
+    .foot-rank {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .foot-team {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text);
+      letter-spacing: .5px;
+    }
+    .band-foot.champ .foot-rank,
+    .band-foot.champ .foot-team { color: var(--accent); }
+
+    /* ─── TABLE ──────────────────────────────────────── */
+    .table-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .table-scroll { overflow-x: auto; }
+    .table-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .table-header .chart-title { font-size: 18px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead th {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      padding: 7px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      z-index: 1;
+    }
+    thead th:not(:first-child):not(:nth-child(2)) { text-align: right; }
+    tbody tr {
+      border-bottom: 1px solid rgba(39,43,54,.5);
+      transition: background .1s;
+    }
+    tbody tr:hover { background: var(--surface2); }
+    tbody tr:last-child { border-bottom: none; }
+    td {
+      padding: 6px 12px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    td:not(:first-child):not(:nth-child(2)) { text-align: right; font-family: 'DM Mono', monospace; }
+    .rank {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      width: 32px;
+      display: inline-block;
+    }
+    .team-name { font-weight: 500; }
+    .pos-rank {
+      color: var(--muted);
+      font-size: 10px;
+      margin-left: 5px;
+    }
+
+    /* ─── LOADING / EMPTY ────────────────────────────── */
+    .state-msg {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+    }
+    .state-msg strong {
+      display: block;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      color: var(--text);
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+
+    /* ─── ANIMATE ────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .wrapper > * {
+      animation: fadeUp .35s ease both;
+    }
+    .wrapper > *:nth-child(1) { animation-delay: .05s; }
+    .wrapper > *:nth-child(2) { animation-delay: .12s; }
+    .wrapper > *:nth-child(3) { animation-delay: .19s; }
+    .wrapper > *:nth-child(4) { animation-delay: .26s; }
+
+    /* ─── SCROLLBAR ──────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    @media (max-width: 900px) {
+      .filter-bar { grid-template-columns: 1fr 1fr; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      header { padding: 16px 20px; }
+      .wrapper { padding: 20px; }
+      .chart-section { padding: 20px 16px; }
+    }
+
+    @media (max-width: 600px) {
+      .filter-bar { grid-template-columns: 1fr; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .nav { gap: 4px; }
+      .nav a { font-size: 10px; padding: 8px 10px; }
+      .header-meta { display: none; }
+      .pos-legend { margin-left: 0; gap: 12px; }
+    }
+
+    input[type="number"]:focus-visible,
+    select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .wrapper > * { animation: none; }
+      .band-fill { transition: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    Kickbase
+    <span id="logo-subtitle">2. BUNDESLIGA ANALYSE</span>
+  </div>
+  <div class="header-meta">
+    <div>DATENBASIS</div>
+    <div id="generated-at">—</div>
+  </div>
+  <nav class="nav">
+    <a href="index.html">Homepage</a>
+    <a href="matchup.html">Zugelassene Punkte</a>
+    <a href="score.html">Matchup-Ranking</a>
+    <a href="scatter.html">Marktwert-Analyse</a>
+    <a href="scores-edit.html">Teamst&auml;rke</a>
+  </nav>
+</header>
+
+<div class="wrapper">
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Saison</label>
+      <select id="filter-season"><!-- aus data/seasons.json gefüllt --></select>
+    </div>
+
+    <div class="filter-group">
+      <label>Heim / Auswärts</label>
+      <select id="filter-venue">
+        <option value="all">Alle Spiele</option>
+        <option value="home">Heimspiele</option>
+        <option value="away">Auswärtsspiele</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Spieltag von / bis</label>
+      <div class="day-range-wrap">
+        <input type="number" id="day-from" min="1" max="34" value="1" />
+        <span class="day-range-sep">–</span>
+        <input type="number" id="day-to"   min="1" max="34" value="34" />
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <label>Ansicht</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" id="view-norm">⌀ JE STARTER</button>
+        <button class="toggle-btn"        id="view-total">GESAMT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS CARDS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label" id="stat-max-label">Bester Wert</div>
+      <div class="stat-value" id="stat-max-pts">—</div>
+      <div class="stat-sub" id="stat-max-team">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label" id="stat-min-label">Schwächster Wert</div>
+      <div class="stat-value" id="stat-min-pts">—</div>
+      <div class="stat-sub" id="stat-min-team">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Liga-Durchschnitt</div>
+      <div class="stat-value" id="stat-avg-pts">—</div>
+      <div class="stat-sub" id="stat-avg-sub">Pro Team im Zeitraum</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label" id="stat-total-label">Gesamt Punkte</div>
+      <div class="stat-value" id="stat-total-pts">—</div>
+      <div class="stat-sub" id="stat-game-count">— Spieltage</div>
+    </div>
+  </div>
+
+  <!-- BÄNDER -->
+  <div class="chart-section">
+    <div class="chart-header">
+      <div class="chart-title">EIGENE PUNKTE NACH POSITION</div>
+      <div class="chart-subtitle" id="chart-subtitle">Reihenfolge: Bundesliga-Tabelle</div>
+      <div class="pos-legend">
+        <div class="pos-dot" style="--c:var(--tw)">TW</div>
+        <div class="pos-dot" style="--c:var(--abw)">ABW</div>
+        <div class="pos-dot" style="--c:var(--mit)">MIT</div>
+        <div class="pos-dot" style="--c:var(--stu)">STU</div>
+      </div>
+    </div>
+    <div class="bands-scroll">
+      <div class="bands-grid" id="bands-grid"></div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-section">
+    <div class="table-header">
+      <div class="chart-title">RANKING</div>
+      <div class="chart-subtitle" id="table-subtitle">Nach Tabellenplatz</div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>TEAM</th>
+            <th id="th-main">⌀ / STARTER</th>
+            <th>TW</th>
+            <th>ABW</th>
+            <th>MIT</th>
+            <th>STU</th>
+            <th>SPIELE</th>
+            <th id="th-last">PKT GESAMT</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr><td colspan="9"><div class="state-msg"><strong>LADEN…</strong>Daten werden gelesen</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="common.js"></script>
+<script>
+/* ─── Positionsbezeichnungen und Farben je Position ─────── */
+const POS_LABEL = { 1:'TW', 2:'ABW', 3:'MIT', 4:'STU' };
+const POS_COLOR = { 1:'#3ab8ff', 2:'#5dde84', 3:'#f5a623', 4:'#ff5f3a' };
+const POS_TRACK = { 1:'#3ab8ff1c', 2:'#5dde841c', 3:'#f5a6231c', 4:'#ff5f3a1c' };
+const POS_KEYS  = [1, 2, 3, 4];
+
+/* 'best'   = 100 % beim Ligabestwert der Position
+   'spread' = Min–Max gespreizt (Letzter leer, Erster voll) */
+const FILL_MODE = 'best';
+
+/* Saison-Manifest, Vorsaison-Übertrag und Achse kommen aus common.js. */
+
+/* ─── Globale Zustandsvariablen ─────────────────────────── */
+let rawData     = null;   // data_<liga>[_<saison>].json
+let matchdays   = null;   // matchdays_bl<liga>[_<saison>].json
+let carry       = null;   // data/carryover.json (einmal geladen)
+let cidx        = null;   // Vorsaison-Index der Liga — nur in der Aggregat-Sicht
+let axis        = [];     // Vorsaison + laufende Saison als durchgehende Achse
+let liga        = '2';
+let season      = SEASON_AGG;
+let useNorm     = true;   // ⌀ je Startelf-Spieler statt Gesamtpunkten
+
+/* Indizes, einmal je geladener Saison aufgebaut */
+let matchTeam   = {};      // "day|gegner|heim" → Team des Spielers an diesem Spieltag
+let starterTeam = {};      // "spielerId|day"  → Team, für das er startete
+let lineupDays  = new Set();  // "teamId|day" mit echter Aufstellung (sonst Minuten-Rückfall)
+
+/* ─── Seite laden ───────────────────────────────────────── */
+async function boot() {
+  liga = localStorage.getItem('kickbase_liga') || '2';
+  await loadSeasonManifest();
+  season = fillSeasonSelect(document.getElementById('filter-season'), storedSeason());
+  saveSeason(season);
+  carry = await loadCarryover();
+  await loadSeason();
+}
+
+/* ─── Daten + Spielplan der gewählten Saison holen ──────── */
+async function loadSeason() {
+  // Die aggregierte Sicht rechnet mit den Dateien der laufenden Saison; die
+  // Vorsaison kommt kompakt aus carryover.json statt aus dem 2,6-MB-Archiv.
+  const suffix    = seasonInfo(season).suffix;
+  const dataFile  = `data/data_${liga}${suffix}.json`;
+  const matchFile = `data/matchdays_bl${liga}${suffix}.json`;
+  cidx = isAgg(season) ? carryIndex(carry, liga) : null;
+
+  document.getElementById('logo-subtitle').textContent =
+    (liga === '1' ? 'BUNDESLIGA ANALYSE' : '2. BUNDESLIGA ANALYSE')
+    + ` (${seasonLabel(season)})`;
+
+  rawData = null;
+  matchdays = null;
+
+  // Spielplan ist optional — ohne ihn läuft die Seite mit Fallback-Sortierung weiter
+  const [dataRes, matchRes] = await Promise.all([
+    fetch(dataFile).catch(e => e),
+    fetch(matchFile).catch(e => e)
+  ]);
+
+  try {
+    if (!(dataRes instanceof Response) || !dataRes.ok) throw new Error(dataRes.status || dataRes);
+    rawData = await dataRes.json();
+  } catch (e) {
+    document.getElementById('bands-grid').innerHTML = '';
+    document.getElementById('table-body').innerHTML =
+      `<tr><td colspan="9"><div class="state-msg">
+        <strong>KEINE DATEN</strong>
+        ${dataFile} nicht gefunden — bitte fetch.py ausführen.<br/>
+        <small style="opacity:.5">${e}</small>
+      </div></td></tr>`;
+    return;
+  }
+
+  if (matchRes instanceof Response && matchRes.ok) {
+    try { matchdays = await matchRes.json(); } catch (e) { matchdays = null; }
+  }
+
+  document.getElementById('generated-at').textContent =
+    new Date(rawData.generated_at).toLocaleString('de-DE', {
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit'
+    });
+
+  buildIndexes();
+  initAxis();
+  render();
+}
+
+/* ─── Team des Spielers an einem konkreten Spieltag ──────
+   player.team_id ist der Verein aus dem Kader-Snapshot. Bei Wintertransfers
+   innerhalb der Liga stimmt der für die erste Saisonhälfte nicht (rund 1 % der
+   Spieler-Spieltage). Der Spielplan löst das eindeutig auf: Gegner + Heim/Auswärts
+   bestimmen, für wen der Spieler an diesem Tag auflief. */
+function teamOf(player, entry) {
+  return matchTeam[`${entry.day}|${entry.opponent}|${!!entry.home}`] || player.team_id;
+}
+
+/* ─── Indizes aufbauen: Team-Zuordnung und Startelf ─────── */
+function buildIndexes() {
+  matchTeam = {}; starterTeam = {}; lineupDays = new Set();
+
+  if (matchdays) {
+    matchdays.matchdays.forEach(md => md.matches.forEach(m => {
+      matchTeam[`${m.day}|${m.t2}|true`]  = String(m.t1);
+      matchTeam[`${m.day}|${m.t1}|false`] = String(m.t2);
+
+      // Echte Aufstellungen (t1lp/t2lp), sofern der Fetcher sie geholt hat.
+      // Das Team kommt aus der Aufstellung, nicht aus dem Performance-Eintrag —
+      // vereinzelt existieren Karteileichen-Einträge beim neuen Verein.
+      [['t1lp', m.t1], ['t2lp', m.t2]].forEach(([side, tid]) => {
+        const lp = m[side];
+        if (!lp || !lp.length) return;
+        lineupDays.add(`${tid}|${m.day}`);
+        lp.forEach(x => starterTeam[`${x.i}|${m.day}`] = String(tid));
+      });
+    }));
+  }
+
+  // Rückfall für Spiele ohne Aufstellung: die 11 Spieler mit den meisten Minuten.
+  // Ergibt strukturell immer genau 11 und trifft die Positionszählung zu rund 90 %.
+  const roster = {};
+  rawData.players.forEach(p => p.performance.forEach(e => {
+    const min = parseInt(e.minutes, 10) || 0;
+    if (min <= 0) return;
+    const team = teamOf(p, e);
+    if (lineupDays.has(`${team}|${e.day}`)) return;
+    (roster[`${team}|${e.day}`] || (roster[`${team}|${e.day}`] = []))
+      .push({ id: String(p.id), day: e.day, min, team });
+  }));
+  Object.keys(roster).forEach(key => {
+    roster[key].sort((a, b) => b.min - a.min).slice(0, 11)
+               .forEach(r => starterTeam[`${r.id}|${r.day}`] = r.team);
+  });
+}
+
+/* ─── Achse aufbauen und Spieltag-Inputs darauf setzen ───
+   Gezählt werden nur wirklich gespielte Spieltage — die noch leeren Spieltage
+   stehen mit points: 0 in den Daten und wären sonst echte Nullen. */
+function initAxis() {
+  const days = matchdays ? playedDays(matchdays) : playedDaysFallback(rawData);
+  axis = buildAxis(cidx, days, isAgg(season));
+  const r = defaultRange(axis);
+  const fromEl = document.getElementById('day-from');
+  const toEl   = document.getElementById('day-to');
+  fromEl.min = toEl.min = 1;
+  fromEl.max = toEl.max = Math.max(1, axis.length);
+  fromEl.value = r.from;
+  toEl.value   = r.to;
+}
+
+function getRange() {
+  return {
+    from: +document.getElementById('day-from').value,
+    to:   +document.getElementById('day-to').value
+  };
+}
+
+/* ─── Eigene Punkte je Team und Position aufsummieren ───── */
+function computeTeamPoints() {
+  const venueFilter = document.getElementById('filter-venue').value;
+  const { from, to } = getRange();
+  const span = axis.slice(from - 1, to);
+
+  const teams = {};
+  Object.keys(rawData.teams).forEach(id => {
+    teams[id] = {
+      total: 0,     byPos:    {1:0, 2:0, 3:0, 4:0},   // alle eingesetzten Spieler
+      startTotal: 0, startPos: {1:0, 2:0, 3:0, 4:0},   // nur Startelf-Spieler
+      benchPos:   {1:0, 2:0, 3:0, 4:0},                // nur Eingewechselte
+      slots:      {1:0, 2:0, 3:0, 4:0, total:0},       // besetzte Startelf-Plätze
+      playedDays: new Set()
+    };
+  });
+
+  // Vorsaison: schon fertig je Team, Spieltag und Position vorberechnet,
+  // Auf-/Absteiger über den gelernten Faktor auf die neue Liga skaliert.
+  span.filter(a => a.season === 'prev').forEach(a => {
+    Object.keys(teams).forEach(id => {
+      const d = carryDay(cidx, id, a.day);
+      if (!d) return;
+      if (venueFilter === 'home' && !d.home) return;
+      if (venueFilter === 'away' &&  d.home) return;
+      const t = teams[id];
+      t.playedDays.add('V' + a.day);
+      POS_KEYS.forEach(pos => {
+        const scored = carryVal(cidx, id, d, 'scored', pos);
+        const start  = carryVal(cidx, id, d, 'start',  pos);
+        t.total          += scored;
+        t.byPos[pos]     += scored;
+        t.startTotal     += start;
+        t.startPos[pos]  += start;
+        t.benchPos[pos]  += scored - start;
+        const slots = carryVal(cidx, id, d, 'slots', pos);
+        t.slots[pos]     += slots;
+        t.slots.total    += slots;
+      });
+      // Spieler ohne Position: in die Summen, in kein Band — wie in der
+      // laufenden Saison auch.
+      const uScored = carryUnpositioned(cidx, id, d, 'scored');
+      const uStart  = carryUnpositioned(cidx, id, d, 'start');
+      t.total       += uScored;
+      t.startTotal  += uStart;
+      t.slots.total += carryUnpositioned(cidx, id, d, 'slots');
+    });
+  });
+
+  const curDays = new Set(span.filter(a => a.season === 'cur').map(a => a.day));
+  const counted = new Set();   // jeder Spieler-Spieltag belegt höchstens einen Startplatz
+
+  rawData.players.forEach(player => {
+    const pos = player.position;
+    const pid = String(player.id);
+    // Für einzelne Rand-Spieler führt Kickbase überhaupt keine Position. Sie
+    // zählen in Team- und Startelf-Summe, aber in kein Band — die Bänder
+    // summieren dadurch knapp unter die Summe.
+    const hasPos = !!POS_LABEL[pos];
+
+    player.performance.forEach(entry => {
+      if (!curDays.has(entry.day)) return;
+      // entry.home = eigenes Team spielte zuhause
+      if (venueFilter === 'home' && !entry.home) return;
+      if (venueFilter === 'away' && entry.home)  return;
+
+      const teamId = teamOf(player, entry);
+      const t = teams[teamId];
+      if (!t) return;
+
+      if (entry.points > 0) t.playedDays.add(entry.day);
+      t.total += entry.points;
+      if (hasPos) t.byPos[pos] = (t.byPos[pos] || 0) + entry.points;
+
+      const key = `${pid}|${entry.day}`;
+      if (starterTeam[key] === teamId && !counted.has(key)) {
+        counted.add(key);
+        t.startTotal += entry.points;
+        if (hasPos) { t.startPos[pos] += entry.points; t.slots[pos]++; }
+        t.slots.total++;
+      } else if (hasPos) {
+        t.benchPos[pos] += entry.points;
+      }
+    });
+  });
+
+  return teams;
+}
+
+/* ─── Bundesliga-Tabelle aus dem Spielplan berechnen ──────
+   Auch in der Aggregat-Sicht nur aus der laufenden Saison: die Tabelle ist eine
+   Tatsache dieser Saison, keine Mischgröße. */
+function computeStandings() {
+  const venueFilter = document.getElementById('filter-venue').value;
+  const { from, to } = getRange();
+  const curDays = new Set(axis.slice(from - 1, to)
+    .filter(a => a.season === 'cur').map(a => a.day));
+
+  const table = {};
+  Object.keys(rawData.teams).forEach(id => {
+    table[id] = { pts: 0, gf: 0, ga: 0, games: 0 };
+  });
+
+  let counted = 0;
+  if (matchdays) {
+    matchdays.matchdays.forEach(md => {
+      md.matches.forEach(m => {
+        if (m.st !== 2) return;                       // 2 = Spiel gewertet
+        if (!curDays.has(m.day)) return;
+        const h = table[m.t1], a = table[m.t2];
+        if (!h || !a) return;
+        counted++;
+
+        const hp = m.t1g > m.t2g ? 3 : (m.t1g === m.t2g ? 1 : 0);
+        const ap = m.t2g > m.t1g ? 3 : (m.t1g === m.t2g ? 1 : 0);
+
+        // Venue-Filter ⇒ Heim- bzw. Auswärtstabelle
+        if (venueFilter !== 'away') {
+          h.pts += hp; h.gf += m.t1g; h.ga += m.t2g; h.games++;
+        }
+        if (venueFilter !== 'home') {
+          a.pts += ap; a.gf += m.t2g; a.ga += m.t1g; a.games++;
+        }
+      });
+    });
+  }
+
+  return { table, available: counted > 0 };
+}
+
+/* ─── Positions-Ranking: gleiche Werte teilen sich den Platz ── */
+function rankByValue(rows, valueFn) {
+  // Teams ohne Wert (Nenner 0) bekommen keinen Rang
+  const sorted = rows.filter(r => valueFn(r) !== null)
+                     .sort((a, b) => valueFn(b) - valueFn(a));
+  const ranks = {};
+  let lastVal, lastRank = 0, first = true;
+  sorted.forEach((r, i) => {
+    const v = valueFn(r);
+    if (first || v !== lastVal) { lastRank = i + 1; lastVal = v; first = false; }
+    ranks[r.id] = lastRank;
+  });
+  return ranks;
+}
+
+/* ─── Angezeigter Wert je nach Ansicht ──────────────────── */
+function metric(r, pos) {
+  // GESAMT: alle Punkte der Position. Normalisiert: nur die Punkte der Startelf-Spieler,
+  // geteilt durch ihre Startplätze — so zählt auch mit, wie früh ein Team wechselt.
+  if (!useNorm) return pos === 'total' ? r.total : r.byPos[pos];
+  const slots  = pos === 'total' ? r.slots.total : r.slots[pos];
+  const points = pos === 'total' ? r.startTotal  : r.startPos[pos];
+  return slots ? points / slots : null;   // Nenner 0 = niemand startete hier
+}
+
+function fmt(v) {
+  if (v === null) return '—';
+  return Math.round(v).toLocaleString('de');
+}
+
+/* ─── Füllgrad eines Abschnitts ─────────────────────────── */
+function fillPct(value, min, max) {
+  let pct;
+  if (FILL_MODE === 'spread') {
+    pct = max === min ? (max > 0 ? 100 : 0) : (value - min) / (max - min) * 100;
+  } else {
+    pct = max > 0 ? value / max * 100 : 0;
+  }
+  // Negative Punktsummen sind möglich — Breite trotzdem gültig halten
+  return Math.max(0, Math.min(100, pct));
+}
+
+/* ─── Hauptfunktion ─────────────────────────────────────── */
+function render() {
+  if (!rawData) return;
+
+  const points = computeTeamPoints();
+  const { table, available } = computeStandings();
+  const { from, to } = getRange();
+
+  let rows = Object.keys(rawData.teams).map(id => {
+    const p = points[id];
+    const s = table[id];
+    // Ohne Spielplan: gespielte Spieltage aus den Punkten ableiten
+    const games = available ? s.games : p.playedDays.size;
+    return {
+      id,
+      name:  rawData.teams[id] || id,
+      note:  cidx ? carryNote(cidx, id, 'scored') : '',
+      total: p.total,
+      byPos: p.byPos,
+      startTotal: p.startTotal,
+      startPos:   p.startPos,
+      benchPos:   p.benchPos,
+      slots:      p.slots,
+      games,
+      avg:   games ? Math.round(p.total / games) : 0,
+      ligaPts: s.pts, gf: s.gf, ga: s.ga, gd: s.gf - s.ga
+    };
+  });
+
+  // Reihenfolge: Tabelle (Platz 1 links) — sonst alphabetisch nach Kürzel
+  if (available) {
+    rows.sort((a, b) =>
+      b.ligaPts - a.ligaPts || b.gd - a.gd || b.gf - a.gf || a.name.localeCompare(b.name));
+  } else {
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  rows.forEach((r, i) => r.place = i + 1);
+
+  // Kennzahlen je Position über die ganze Liga — auf Basis der aktiven Ansicht
+  const posStats = {};
+  POS_KEYS.forEach(pos => {
+    const vals = rows.map(r => metric(r, pos)).filter(v => v !== null);
+    const sum  = vals.reduce((a, b) => a + b, 0);
+    posStats[pos] = {
+      max:  vals.length ? Math.max(...vals) : 0,
+      min:  vals.length ? Math.min(...vals) : 0,
+      avg:  vals.length ? sum / vals.length : 0,
+      rank: rankByValue(rows, r => metric(r, pos))
+    };
+  });
+
+  updateStats(rows);
+  renderBands(rows, posStats);
+  renderTable(rows, posStats);
+
+  const venue = document.getElementById('filter-venue').value;
+  const venueTxt = venue === 'home' ? ' · nur Heim' : (venue === 'away' ? ' · nur Auswärts' : '');
+  const order = available
+    ? (venue === 'home' ? 'Heimtabelle' : venue === 'away' ? 'Auswärtstabelle' : 'Bundesliga-Tabelle')
+    : 'Tabelle noch nicht verfügbar (keine Ergebnisse) — alphabetisch';
+  const mode = useNorm ? 'Punkte je Startelf-Spieler' : 'Gesamtpunkte';
+  const span = `ST ${rangeLabel(axis, from, to)}`;
+  document.getElementById('chart-subtitle').textContent = `${span}${venueTxt} · ${mode} · ${order}`;
+  document.getElementById('table-subtitle').textContent = `${span}${venueTxt} · ${mode}`;
+
+}
+
+/* ─── Die 4 Kennzahl-Karten oben befüllen ───────────────── */
+function updateStats(rows) {
+  if (!rows.length) return;
+  const vals = rows.map(r => ({ r, v: metric(r, 'total') })).filter(x => x.v !== null);
+  if (!vals.length) {
+    ['stat-max-pts','stat-max-team','stat-min-pts','stat-min-team','stat-avg-pts','stat-total-pts']
+      .forEach(id => document.getElementById(id).textContent = '—');
+    const { from: f0, to: t0 } = getRange();
+    document.getElementById('stat-game-count').textContent =
+      `ST ${rangeLabel(axis, f0, t0)} · keine Daten`;
+    return;
+  }
+  vals.sort((a, b) => b.v - a.v);
+  const max = vals[0], min = vals[vals.length - 1];
+  const sum = vals.reduce((a, x) => a + x.v, 0);
+  const pointsSum = rows.reduce((a, r) => a + r.total, 0);
+  const slotsSum  = rows.reduce((a, r) => a + r.slots.total, 0);
+
+  document.getElementById('stat-max-label').textContent =
+    useNorm ? 'Bester ⌀ / Startelf-Spieler' : 'Meiste Punkte';
+  document.getElementById('stat-min-label').textContent =
+    useNorm ? 'Schwächster ⌀ / Startelf-Spieler' : 'Wenigste Punkte';
+  document.getElementById('stat-total-label').textContent =
+    useNorm ? 'Startelf-Plätze' : 'Gesamt Punkte';
+  document.getElementById('stat-avg-sub').textContent =
+    useNorm ? 'Punkte je Startelf-Spieler' : 'Pro Team im Zeitraum';
+
+  document.getElementById('stat-max-pts').textContent  = fmt(max.v);
+  document.getElementById('stat-max-team').textContent = `${max.r.name} · Platz ${max.r.place}`;
+  document.getElementById('stat-min-pts').textContent  = fmt(min.v);
+  document.getElementById('stat-min-team').textContent = `${min.r.name} · Platz ${min.r.place}`;
+  document.getElementById('stat-avg-pts').textContent  = fmt(sum / vals.length);
+  document.getElementById('stat-total-pts').textContent =
+    Math.round(useNorm ? slotsSum : pointsSum).toLocaleString('de');
+  const { from, to } = getRange();
+  const benchSum = rows.reduce((a, r) => a + POS_KEYS.reduce((s, p) => s + r.benchPos[p], 0), 0);
+  document.getElementById('stat-game-count').textContent =
+    useNorm ? `${Math.round(benchSum).toLocaleString('de')} Pkt von der Bank (nicht gewertet)`
+            : `ST ${rangeLabel(axis, from, to)} (${to - from + 1} Spieltage)`;
+}
+
+/* ─── Bänder-Grid zeichnen ──────────────────────────────── */
+function renderBands(rows, posStats) {
+  const grid = document.getElementById('bands-grid');
+  if (!rows.length) { grid.innerHTML = ''; return; }
+
+  const n = rows.length;
+  // COL ist nur die Mindestbreite — bei genug Platz dehnen sich die Spalten (1fr)
+  const COL = 58, GAP = 4, LABEL = 54;
+  grid.style.gridTemplateColumns = `${LABEL}px repeat(${n}, minmax(${COL}px, 1fr))`;
+  grid.style.minWidth = `${LABEL + n * (COL + GAP)}px`;
+
+  const html = [];
+
+  POS_KEYS.forEach(pos => {
+    const st = posStats[pos];
+    html.push(`<div class="band-label" style="--c:${POS_COLOR[pos]}">${POS_LABEL[pos]}</div>`);
+
+    rows.forEach(r => {
+      const val   = metric(r, pos);
+      const slots = r.slots[pos];
+      const pct   = val === null ? 0 : fillPct(val, st.min, st.max);
+      const aPct  = fillPct(st.avg, st.min, st.max);
+      const rank  = st.rank[r.id];
+      const share = (val !== null && st.max > 0) ? Math.round(val / st.max * 100) : 0;
+
+      const calc = useNorm
+        ? (slots
+            ? `${fmt(r.startPos[pos])} Pkt ÷ ${slots} Startplätze (${(slots / (r.games || 1)).toFixed(2)} je ST) = ${fmt(val)}`
+              + `\nvon der Bank zusätzlich ${fmt(r.benchPos[pos])} Pkt (nicht gewertet)`
+            : `niemand startete im Zeitraum auf dieser Position`)
+        : `${fmt(r.byPos[pos] || 0)} Pkt`;
+      const rankTxt = rank ? `Platz ${rank} von ${rows.length}` : 'kein Rang (kein Startplatz)';
+      const tip = `${r.name} · ${POS_LABEL[pos]}\n${calc}\n${rankTxt}`
+                + (val !== null ? `\n${share} % vom Ligabestwert (${fmt(st.max)})` : '')
+                + (r.note ? `\n${r.note}` : '');
+
+      html.push(
+        `<div class="band" style="--c:${POS_COLOR[pos]};--ct:${POS_TRACK[pos]}" title="${tip}">` +
+          `<div class="band-fill" style="width:${pct.toFixed(1)}%"></div>` +
+          `<div class="band-avg" style="left:${aPct.toFixed(1)}%"></div>` +
+          `<div class="band-rank">${rank ? rank + '.' : '—'}</div>` +
+        `</div>`
+      );
+    });
+  });
+
+  // Fußzeile: Tabellenplatz + Team-Kürzel
+  html.push('<div class="band-label"></div>');
+  rows.forEach(r => {
+    const tip = `${r.name} · Platz ${r.place}\n${r.ligaPts} Ligapunkte · ${r.games} Spiele\n${r.gf}:${r.ga} Tore (${r.gd > 0 ? '+' : ''}${r.gd})`
+              + (r.note ? `\n${r.note}` : '');
+    html.push(
+      `<div class="band-foot${r.place === 1 ? ' champ' : ''}" title="${tip}">` +
+        `<span class="foot-rank">${r.place}.</span>` +
+        `<span class="foot-team">${r.name}${r.note ? '*' : ''}</span>` +
+      `</div>`
+    );
+  });
+
+  grid.innerHTML = html.join('');
+}
+
+/* ─── Ranglisten-Tabelle zeilenweise aufbauen ───────────── */
+function renderTable(rows, posStats) {
+  const tbody = document.getElementById('table-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="state-msg"><strong>KEINE DATEN</strong>Filter anpassen.</div></td></tr>';
+    return;
+  }
+  const cssVar = { 1:'--tw', 2:'--abw', 3:'--mit', 4:'--stu' };
+
+  document.getElementById('th-main').textContent = useNorm ? '⌀ / STARTER' : 'PUNKTE';
+  document.getElementById('th-last').textContent = useNorm ? 'PKT GESAMT'  : '⌀ / ST';
+
+  tbody.innerHTML = rows.map(r => {
+    const cells = POS_KEYS.map(pos => {
+      const val  = metric(r, pos);
+      const rank = posStats[pos].rank[r.id];
+      const tip  = useNorm
+        ? `${fmt(r.startPos[pos])} Pkt ÷ ${r.slots[pos]} Startplätze`
+          + ` · Bank ${fmt(r.benchPos[pos])} Pkt (nicht gewertet)`
+        : `${r.slots[pos]} Startplätze`;
+      return `<td style="color:var(${cssVar[pos]})" title="${tip}">${fmt(val)}`
+           + `<span class="pos-rank">${rank ? rank + '.' : '—'}</span></td>`;
+    }).join('');
+    return `<tr>
+      <td><span class="rank">${r.place}</span></td>
+      <td><span class="team-name" title="${r.note}">${r.name}${r.note ? '*' : ''}</span></td>
+      <td>${fmt(metric(r, 'total'))}</td>
+      ${cells}
+      <td>${r.games}</td>
+      <td>${useNorm ? fmt(r.total) : r.avg.toLocaleString('de')}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ─── Filter überwachen ─────────────────────────────────── */
+document.getElementById('filter-season').addEventListener('change', function() {
+  season = this.value;
+  saveSeason(season);
+  loadSeason();
+});
+
+document.getElementById('filter-venue').addEventListener('change', render);
+
+document.getElementById('view-norm').addEventListener('click', function() {
+  useNorm = true;
+  this.classList.add('active');
+  document.getElementById('view-total').classList.remove('active');
+  render();
+});
+document.getElementById('view-total').addEventListener('click', function() {
+  useNorm = false;
+  this.classList.add('active');
+  document.getElementById('view-norm').classList.remove('active');
+  render();
+});
+
+['day-from','day-to'].forEach(id => {
+  document.getElementById(id).addEventListener('change', function() {
+    clampRange(document.getElementById('day-from'),
+               document.getElementById('day-to'),
+               axis, id === 'day-from' ? 'from' : 'to');
+    render();
+  });
+});
+
+boot();
+</script>
+</body>
+</html>

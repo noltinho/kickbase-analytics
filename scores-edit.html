@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kickbase · Schwierigkeits-Scores</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+  <style>
+    :root {
+      --bg:       #131417;
+      --surface:  #1a1d21;
+      --surface2: #21252a;
+      --border:   #2f363f;
+      --text:     #dee4ec;
+      --muted:    #7e8187;
+      --accent:   #ff4600;
+
+      /* Dieselbe Skala wie in score.html: Türkis · Dunkelgrün · Hellgrün ·
+         Grau · Orange · Feuerwehrrot · Lila. Einmal um den Farbkreis statt nur
+         zwischen Rot und Grün — schlechteste Paarung unter simulierter
+         Protanopie/Deuteranopie: vorher ΔE 1,0, jetzt ΔE 10,5. */
+
+      /* Schrift auf dunklem Grund — jede Stufe mindestens 4,5:1 gegen den Grund */
+      --c3:  #4ce4e8;
+      --c2:  #4b8b62;
+      --c1:  #8be5a2;
+      --c0:  #aaaaaa;
+      --cm1: #f69b4c;
+      --cm2: #f43602;
+      --cm3: #d95aef;
+
+      /* Flächen — teilen sich die Skala mit score.html */
+      --c3bg:  #3fcbc5;
+      --c2bg:  #3c7c54;
+      --c1bg:  #5be892;
+      --c0bg:  #3f3b3c;
+      --cm1bg: #f09202;
+      --cm2bg: #dd2415;
+      --cm3bg: #c21ead;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+    }
+
+    .app {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* HEADER */
+    header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 14px 28px;
+      border-bottom: 1px solid rgba(255,70,0,.18);
+      background: rgba(19,20,23,.97);
+      backdrop-filter: blur(12px);
+      z-index: 300;
+    }
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 26px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .logo span {
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      display: block;
+    }
+    .nav { display: flex; gap: 8px; margin-left: auto; }
+    .nav a {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      text-decoration: none;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      border-radius: 5px;
+      transition: all .15s;
+    }
+    .nav a:hover { color: var(--text); border-color: var(--muted); }
+    .nav a.active {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: rgba(255,70,0,.07);
+    }
+    .nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* MAIN */
+    .main {
+      flex: 1;
+      overflow: auto;
+      padding: 28px 28px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* TOOLBAR */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+    .section-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 2.5px;
+      color: var(--accent);
+    }
+    .section-hint {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .season-select {
+      margin-left: auto;
+      background: var(--surface2, transparent);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      outline: none;
+    }
+    .season-select:hover, .season-select:focus { border-color: var(--accent); }
+    .btn-reset {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-reset:hover { border-color: var(--accent); color: var(--accent); background: rgba(255,70,0,.06); }
+
+    /* TEAM ROW */
+    .team-grid {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    /* TEAM CARD */
+    .tscard {
+      flex: 1;
+      min-width: 0;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-top: 2px solid var(--accent);
+      border-radius: 8px;
+      padding: 10px 8px 2px;
+      text-align: center;
+      transition: border-color .15s, background .15s;
+    }
+    .tscard:hover { border-color: var(--accent); background: #22263080; }
+    .tscard-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 16px;
+      letter-spacing: 1px;
+      color: var(--accent);
+      margin-bottom: 10px;
+      line-height: 1;
+    }
+    .sc-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .sc-row-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .sc-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      height: 32px;
+    }
+    .sc-btn {
+      width: 24px; height: 24px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: all .1s;
+      flex-shrink: 0;
+      font-family: monospace;
+    }
+    .sc-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .sc-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .sc-val {
+      width: 24px;
+      background: transparent;
+      border: none;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      outline: none;
+      -moz-appearance: textfield;
+      padding: 0;
+      cursor: default;
+    }
+    .sc-val::-webkit-inner-spin-button,
+    .sc-val::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .sc-val:focus { cursor: text; }
+
+    .sv3  { color: var(--c3); }
+    .sv2  { color: var(--c2); }
+    .sv1  { color: var(--c1); }
+    .sv0  { color: var(--muted); }
+    .svm1 { color: var(--cm1); }
+    .svm2 { color: var(--cm2); }
+    .svm3 { color: var(--cm3); }
+
+    .state-msg {
+      display: flex; align-items: center; justify-content: center;
+      padding: 60px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: var(--muted);
+    }
+
+    .sc-val:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
+    .btn-reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ── TABELLEN ────────────────────────────── */
+    .table-section {
+      flex-shrink: 0;
+    }
+    .table-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 2.5px;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .tables-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .table-col {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .table-col-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .table-col-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 16px;
+      letter-spacing: 2px;
+      color: var(--text);
+    }
+    .table-col-badge {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #131417;
+      background: var(--accent);
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-weight: 500;
+    }
+    .standings-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .standings-table thead th {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+      padding: 6px 14px;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .standings-table thead th:first-child,
+    .standings-table thead th:nth-child(2) { text-align: left; }
+    .standings-table tbody tr {
+      border-bottom: 1px solid rgba(39,43,54,.5);
+      transition: background .1s;
+    }
+    .standings-table tbody tr:hover { background: var(--surface2); }
+    .standings-table tbody tr:last-child { border-bottom: none; }
+    .standings-table td {
+      padding: 6px 14px;
+      text-align: right;
+      font-family: 'DM Mono', monospace;
+    }
+    .standings-table td:first-child { color: var(--muted); font-size: 10px; text-align: left; }
+    .standings-table td:nth-child(2) {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 15px;
+      letter-spacing: 1px;
+      color: var(--accent);
+      text-align: left;
+    }
+    .standings-table td.pts {
+      font-weight: 500;
+      color: var(--text);
+      font-size: 13px;
+    }
+    .standings-table td.diff-pos { color: #4ade80; }
+    .standings-table td.diff-neg { color: #f87171; }
+    .standings-table td.diff-zero { color: var(--muted); }
+
+    @media (max-width: 600px) {
+      header { padding: 10px 16px; gap: 12px; }
+      .nav { gap: 4px; }
+      .nav a { font-size: 9px; padding: 8px 8px; }
+      .main { padding: 16px; }
+      .team-grid { flex-wrap: wrap; }
+      .tscard { flex: 0 0 calc(50% - 3px); min-width: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tscard { transition: none; }
+      .sc-btn { transition: none; }
+      .btn-reset { transition: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">KICKBASE<span id="logo-subtitle">2. Bundesliga</span></div>
+    <nav class="nav">
+      <a href="index.html">Homepage</a>
+      <a href="teampunkte.html">Punkte pro Team</a>
+      <a href="matchup.html">Zugelassene Punkte</a>
+      <a href="score.html">Matchup-Ranking</a>
+      <a href="scatter.html">Marktwert-Analyse</a>
+    </nav>
+  </header>
+
+  <div class="main">
+    <div class="toolbar">
+      <div class="section-title">Schwierigkeits-Scores</div>
+      <div class="section-hint" id="basis-hint">Heim &amp; Ausw&auml;rts &middot; &minus;3 bis +3 &middot; Jenks Natural Breaks</div>
+      <select class="season-select" id="filter-season"><!-- aus data/seasons.json --></select>
+      <button class="btn-reset" id="btn-reset">&#8634; Zur&uuml;cksetzen</button>
+    </div>
+    <div class="team-grid" id="team-grid">
+      <div class="state-msg">LADE&hellip;</div>
+    </div>
+
+    <div class="table-section">
+      <div class="table-title">Tabellen</div>
+      <div class="tables-grid">
+        <div class="table-col">
+          <div class="table-col-header">
+            <div class="table-col-title">Gesamt</div>
+          </div>
+          <div id="standings-total"></div>
+        </div>
+        <div class="table-col">
+          <div class="table-col-header">
+            <div class="table-col-title">Heim</div>
+            <div class="table-col-badge">H</div>
+          </div>
+          <div id="standings-home"></div>
+        </div>
+        <div class="table-col">
+          <div class="table-col-header">
+            <div class="table-col-title">Auswärts</div>
+            <div class="table-col-badge">A</div>
+          </div>
+          <div id="standings-away"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="common.js"></script>
+<script>
+const LIGA = localStorage.getItem('kickbase_liga') || '2';
+const SMIN = -3, SMAX = 3;
+
+/* Die Scores bewerten die kommenden Spieltage der laufenden Saison — sie
+   landen deshalb immer unter deren Schlüssel, egal auf welcher Datenbasis sie
+   berechnet wurden. score.html liest genau diesen Eintrag. */
+let season = SEASON_AGG;
+let STORAGE_KEY = '', DATA_FILE = '', MATCHDAYS_FILE = '';
+
+let rawData       = null;
+let matchdaysData = null;
+let carry         = null;
+let cidx          = null;
+let ratings       = null;
+let ratL          = null;
+let axis          = [];
+let baseScores    = {};
+let currentScores = {};
+
+async function boot() {
+  await loadSeasonManifest();
+  // Ohne die aggregierte Sicht: die Basis-Scores kommen aus data/ratings.json,
+  // und dort ist die Vorsaison bereits eingerechnet. Der Eintrag "Saison +
+  // Vorsaison" lieferte deshalb exakt dieselben Werte wie die laufende Saison —
+  // eine Auswahl ohne Wirkung. Die Archivsaisons bleiben, sie schalten auf das
+  // alte Rohmittel-Verfahren um.
+  season = fillSeasonSelect(document.getElementById('filter-season'), storedSeason(), false);
+  saveSeason(season);
+  [carry, ratings] = await Promise.all([loadCarryover(), loadRatings()]);
+  await loadSeason();
+}
+
+async function loadSeason() {
+  const suffix   = seasonInfo(season).suffix;
+  DATA_FILE      = `data/data_${LIGA}${suffix}.json`;
+  MATCHDAYS_FILE = `data/matchdays_bl${LIGA}${suffix}.json`;
+  STORAGE_KEY    = `kickbase_scores_bl${LIGA}${suffix}`;
+  cidx = isAgg(season) ? carryIndex(carry, LIGA) : null;
+
+  document.getElementById('logo-subtitle').textContent =
+    (LIGA === '1' ? 'Bundesliga ' : '2. Bundesliga ') + seasonLabel(season);
+
+  try {
+    const [dataRes, mdRes] = await Promise.all([
+      fetch(DATA_FILE), fetch(MATCHDAYS_FILE)
+    ]);
+    rawData = await dataRes.json();
+    matchdaysData = await mdRes.json();
+
+    computeBase();
+    // Die Basis wird bei jedem Laden neu gerechnet; aus dem Speicher kommt nur
+    // die Handkorrektur als Differenz. Vorher schrieb diese Stelle den alten
+    // Stand zurück — die Scores froren beim ersten Seitenaufruf ein und
+    // veralteten mit jedem Spieltag weiter.
+    currentScores = applyScoreDeltas(baseScores, readScoreStore(STORAGE_KEY), SMIN, SMAX);
+    saveToStorage();
+    renderGrid();
+    renderTable(matchdaysData);
+  } catch(e) {
+    document.getElementById('team-grid').innerHTML =
+      `<div class="state-msg">FEHLER: ${e.message}</div>`;
+  }
+}
+
+/* Basis-Scores. Für die laufende Saison kommen sie aus data/ratings.json, wo
+   die Abwehrstärke gegnerbereinigt geschätzt ist — der rohe Mittelwert der
+   zugelassenen Punkte belohnt sonst, wer schwache Gegner erwischt hat. Für
+   Archivsaisons und wenn die Datei fehlt, greift das alte Verfahren. */
+function computeBase() {
+  const days = playedDays(matchdaysData);
+  axis = buildAxis(cidx, days, isAgg(season));
+  ratL = seasonInfo(season).key === SEASONS.current ? ratingLeague(ratings, LIGA) : null;
+
+  const hint = document.getElementById('basis-hint');
+  if (ratL) {
+    baseScores = ratingBaseScores(ratL, Object.keys(rawData.teams));
+    // ratings.json entsteht in kbxp und kennt den Stand seines letzten Laufs.
+    // Liegt der hinter den Daten, ist die Datei nach einem fetch.py-Lauf nicht
+    // neu gebaut worden — das gehört sichtbar, sonst veraltet sie stumm.
+    const gerechnet = ratingsDays(ratL), gespielt = days.size;
+    hint.textContent = `Heim & Auswärts · −3 bis +3 · gegnerbereinigt (Ridge) · Basis: `
+      + `Vorsaison + ${gerechnet} gespielte ST · Heimvorteil ${Math.round(ratL.hfa)} Pkt`
+      + (gerechnet < gespielt
+         ? ` · VERALTET: ${gespielt} ST gespielt, ratings.json neu bauen` : '');
+    return;
+  }
+
+  baseScores = computeBaseScores(rawData, cidx, axis,
+                                 { from: 1, to: axis.length }, 0.95, SMIN);
+  const prev = axis.filter(a => a.season === 'prev').length;
+  const cur  = axis.length - prev;
+  hint.textContent =
+    `Heim & Auswärts · −3 bis +3 · Jenks Natural Breaks · Basis: `
+    + (prev ? `${prev} ST Vorsaison + ${cur} ST laufend` : `${cur} gespielte ST`);
+}
+
+function renderGrid() {
+  const grid = document.getElementById('team-grid');
+  const ids = Object.keys(rawData.teams)
+    .sort((a,b) => rawData.teams[a].localeCompare(rawData.teams[b]));
+
+  grid.innerHTML = ids.map(id => {
+    const abbr = rawData.teams[id];
+    const hs = currentScores[id].home;
+    const as = currentScores[id].away;
+    return `<div class="tscard" data-id="${id}">
+      <div class="tscard-name">${abbr}</div>
+      <div class="sc-group">
+        <div>
+          <div class="sc-row-label">Heim</div>
+          <div class="sc-row">
+            <button class="sc-btn" onclick="adj('${id}','home',-1)">&#8722;</button>
+            <input class="sc-val ${svc(hs)}" type="number" min="-3" max="3" value="${hs}"
+              data-id="${id}" data-type="home"
+              onchange="hInp(this,'${id}','home')"
+              oninput="hInp(this,'${id}','home')" />
+            <button class="sc-btn" onclick="adj('${id}','home',1)">+</button>
+          </div>
+        </div>
+        <div>
+          <div class="sc-row-label">Ausw.</div>
+          <div class="sc-row">
+            <button class="sc-btn" onclick="adj('${id}','away',-1)">&#8722;</button>
+            <input class="sc-val ${svc(as)}" type="number" min="-3" max="3" value="${as}"
+              data-id="${id}" data-type="away"
+              onchange="hInp(this,'${id}','away')"
+              oninput="hInp(this,'${id}','away')" />
+            <button class="sc-btn" onclick="adj('${id}','away',1)">+</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function adj(id, type, delta) {
+  const nv = Math.max(SMIN, Math.min(SMAX, currentScores[id][type] + delta));
+  currentScores[id][type] = nv;
+  const inp = document.querySelector(`.sc-val[data-id="${id}"][data-type="${type}"]`);
+  if (inp) { inp.value = nv; inp.className = `sc-val ${svc(nv)}`; }
+  saveToStorage();
+}
+
+function hInp(el, id, type) {
+  let v = parseInt(el.value, 10);
+  if (isNaN(v)) return;
+  v = Math.max(SMIN, Math.min(SMAX, v));
+  currentScores[id][type] = v;
+  el.className = `sc-val ${svc(v)}`;
+  saveToStorage();
+}
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  currentScores = deepCopy(baseScores);
+  saveToStorage();
+  renderGrid();
+});
+
+document.getElementById('filter-season').addEventListener('change', function() {
+  season = this.value;
+  saveSeason(season);
+  loadSeason();
+});
+
+function saveToStorage() {
+  writeScoreStore(STORAGE_KEY, baseScores, currentScores);
+}
+
+function svc(v) {
+  return ({3:'sv3',2:'sv2',1:'sv1',0:'sv0','-1':'svm1','-2':'svm2','-3':'svm3'})[String(v)] || 'sv0';
+}
+
+function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
+
+/* ── TABELLEN-LOGIK ────────────────────────────────────── */
+
+function computeStandings(matchdaysData, mode) {
+  // mode: 'total' | 'home' | 'away'
+  const teams = {};
+
+  for (const md of matchdaysData.matchdays) {
+    for (const m of md.matches) {
+      if (m.st !== 2) continue; // nur abgeschlossene Spiele
+
+      // Nur anlegen, wer in dieser Sicht auch zählt — sonst steht ein Team, das
+      // erst auswärts gespielt hat, mit 0 Spielen in der Heimtabelle.
+      const seiten = mode === 'home' ? [m.t1sy] : mode === 'away' ? [m.t2sy] : [m.t1sy, m.t2sy];
+      seiten.forEach(sy => {
+        if (!teams[sy]) teams[sy] = { sp: 0, s: 0, u: 0, n: 0, tore: 0, gt: 0 };
+      });
+
+      const t1 = teams[m.t1sy]; // Heimteam
+      const t2 = teams[m.t2sy]; // Auswärtsteam
+
+      if (mode === 'home') {
+        // nur Heimspiele: nur t1 bekommt Eintrag
+        t1.sp++;
+        t1.tore += m.t1g; t1.gt += m.t2g;
+        if (m.t1g > m.t2g)      t1.s++;
+        else if (m.t1g === m.t2g) t1.u++;
+        else                      t1.n++;
+      } else if (mode === 'away') {
+        // nur Auswärtsspiele: nur t2 bekommt Eintrag
+        t2.sp++;
+        t2.tore += m.t2g; t2.gt += m.t1g;
+        if (m.t2g > m.t1g)      t2.s++;
+        else if (m.t1g === m.t2g) t2.u++;
+        else                      t2.n++;
+      } else {
+        // Gesamt: beide
+        t1.sp++; t2.sp++;
+        t1.tore += m.t1g; t1.gt += m.t2g;
+        t2.tore += m.t2g; t2.gt += m.t1g;
+        if (m.t1g > m.t2g)      { t1.s++; t2.n++; }
+        else if (m.t1g === m.t2g) { t1.u++; t2.u++; }
+        else                      { t1.n++; t2.s++; }
+      }
+    }
+  }
+
+  return Object.entries(teams)
+    .map(([abbr, d]) => ({
+      abbr,
+      sp:   d.sp,
+      s:    d.s,
+      u:    d.u,
+      n:    d.n,
+      tore: d.tore,
+      gt:   d.gt,
+      diff: d.tore - d.gt,
+      pts:  d.s * 3 + d.u,
+    }))
+    .sort((a, b) => b.pts - a.pts || b.diff - a.diff || b.tore - a.tore);
+}
+
+function renderStandings(matchdaysData, mode, containerId) {
+  const rows = computeStandings(matchdaysData, mode);
+  const diffClass = d => d > 0 ? 'diff-pos' : d < 0 ? 'diff-neg' : 'diff-zero';
+  const sign = d => d > 0 ? `+${d}` : String(d);
+
+  document.getElementById(containerId).innerHTML = `
+    <table class="standings-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Team</th>
+          <th>Sp</th><th>S</th><th>U</th><th>N</th>
+          <th>Tore</th><th>Diff</th><th>Pts</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r, i) => `<tr>
+          <td>${i + 1}</td>
+          <td>${r.abbr}</td>
+          <td>${r.sp}</td>
+          <td>${r.s}</td>
+          <td>${r.u}</td>
+          <td>${r.n}</td>
+          <td>${r.tore}:${r.gt}</td>
+          <td class="${diffClass(r.diff)}">${sign(r.diff)}</td>
+          <td class="pts">${r.pts}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function renderTable(matchdaysData) {
+  renderStandings(matchdaysData, 'total', 'standings-total');
+  renderStandings(matchdaysData, 'home',  'standings-home');
+  renderStandings(matchdaysData, 'away',  'standings-away');
+}
+
+boot();
+</script>
+</body>
+</html>

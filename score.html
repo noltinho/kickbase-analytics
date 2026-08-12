@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kickbase · Matchup Analyse</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+  <style>
+    :root {
+      --bg:       #131417;
+      --surface:  #1a1d21;
+      --surface2: #21252a;
+      --border:   #2f363f;
+      --text:     #dee4ec;
+      --muted:    #7e8187;
+      --accent:   #ff4600;
+
+      /* Türkis · Dunkelgrün · Hellgrün · Grau · Orange · Feuerwehrrot · Lila.
+         Die Skala läuft einmal um den Farbkreis statt nur zwischen Rot und
+         Grün zu pendeln — dadurch trennen sich benachbarte Stufen auch dort,
+         wo die Rot-Grün-Achse ausfällt. Lila am unteren Ende ist der Anker:
+         es liegt von allem anderen weit weg.
+
+         Helligkeit und Sättigung sind je Stufe darauf optimiert, die
+         schlechteste aller 21 Paarungen unter simulierter Protanopie und
+         Deuteranopie zu maximieren (Machado-Oliveira-Fernandes, Stärke 1,0,
+         ΔE in OKLab ×100):
+             alt   ΔE  1,0   (−1 gegen −2 praktisch identisch)
+             neu   ΔE 10,5   bei voller Farbsicht 16,7
+         Zielwert der Leitlinie ist 8. Zusätzlich trägt jede Zelle ihre Zahl
+         im Klartext — Farbe ist Verstärkung, nicht der einzige Träger. */
+
+      /* Flächen (Zellen) samt passender Schriftfarbe */
+      --c3bg:  #3fcbc5; --c3fg:  #0b0f14;   /* Türkis */
+      --c2bg:  #3c7c54; --c2fg:  #ffffff;   /* Dunkelgrün */
+      --c1bg:  #5be892; --c1fg:  #0b0f14;   /* Hellgrün */
+      --c0bg:  #3f3b3c; --c0fg:  #ffffff;   /* Grau */
+      --cm1bg: #f09202; --cm1fg: #0b0f14;   /* Orange */
+      --cm2bg: #dd2415; --cm2fg: #ffffff;   /* Feuerwehrrot */
+      --cm3bg: #c21ead; --cm3fg: #ffffff;   /* Lila */
+
+      /* Schrift auf dunklem Grund (Σ-Spalte, Legende) — dieselben Farbtöne,
+         aber aufgehellt, damit jede Stufe mindestens 4,5:1 gegen den
+         Seitenhintergrund erreicht. */
+      --c3:  #4ce4e8;
+      --c2:  #4b8b62;
+      --c1:  #8be5a2;
+      --c0:  #aaaaaa;
+      --cm1: #f69b4c;
+      --cm2: #f43602;
+      --cm3: #d95aef;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior-x: none;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+    }
+
+    .app {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* HEADER */
+    header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 8px 28px;
+      border-bottom: 1px solid rgba(255,70,0,.18);
+      background: rgba(19,20,23,.97);
+      backdrop-filter: blur(12px);
+      z-index: 300;
+    }
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 26px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .logo span {
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      display: block;
+    }
+    .nav { display: flex; gap: 8px; margin-left: auto; }
+    .nav a {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      text-decoration: none;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      border-radius: 5px;
+      transition: all .15s;
+    }
+    .nav a:hover { color: var(--text); border-color: var(--muted); }
+    .nav a.active {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: rgba(255,70,0,.07);
+    }
+    .nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .sv3  { color: var(--c3); }
+    .sv2  { color: var(--c2); }
+    .sv1  { color: var(--c1); }
+    .sv0  { color: var(--muted); }
+    .svm1 { color: var(--cm1); }
+    .svm2 { color: var(--cm2); }
+    .svm3 { color: var(--cm3); }
+
+    /* FILTER BAR */
+    .filter-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 6px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      animation: fadeUp .3s .08s ease both;
+    }
+    .filter-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--text);
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .day-input {
+      width: 50px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      outline: none;
+      text-align: center;
+      -moz-appearance: textfield;
+      transition: border-color .15s;
+    }
+    .day-input::-webkit-inner-spin-button,
+    .day-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .day-input:hover, .day-input:focus { border-color: var(--accent); }
+    .day-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .filter-sep { color: var(--muted); font-size: 14px; }
+    .mode-select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      outline: none;
+    }
+    .mode-select:hover, .mode-select:focus { border-color: var(--accent); }
+    .mode-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .filter-info {
+      margin-left: auto;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .score-legend { display: flex; gap: 10px; margin-left: 20px; }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1px;
+      color: var(--text);
+    }
+    .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+    /* TABLE SECTION */
+    .table-section {
+      flex: 1;
+      min-height: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior: none;
+      animation: fadeUp .3s .16s ease both;
+    }
+    .table-section::-webkit-scrollbar { height: 6px; }
+    .table-section::-webkit-scrollbar-track { background: var(--bg); }
+    .table-section::-webkit-scrollbar-thumb { background: rgba(255,70,0,.25); border-radius: 3px; }
+
+    /* GRID TABLE — columns & rows set via inline style by JS */
+    .rtable {
+      display: grid;
+      height: 100%;
+      min-width: 100%;
+      width: max-content;
+      font-size: 12px;
+    }
+
+    /* Row wrappers are invisible to the grid but preserve DOM grouping for hover */
+    .row { display: contents; }
+
+    /* Header cells */
+    .th {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #191c24;
+      border-bottom: 2px solid rgba(255,70,0,.2);
+      padding: 9px 8px;
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    /* Body cells */
+    .td {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      padding: 0 4px;
+    }
+    .row:hover > .td { background: var(--surface2); }
+
+    /* Sticky columns */
+    .col-rank {
+      position: sticky; left: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      padding: 0 6px;
+    }
+    .col-team {
+      position: sticky; left: 38px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 15px;
+      letter-spacing: 1px;
+      justify-content: center;
+      padding: 0 10px;
+    }
+    .col-sigma {
+      position: sticky; left: 98px;
+      background: var(--surface);
+      border-right: 2px solid var(--border);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 0 8px;
+    }
+    .td.col-rank, .td.col-team, .td.col-sigma { z-index: 5; }
+    .th.col-rank, .th.col-team { z-index: 20; }
+    .th.col-sigma { z-index: 20; color: var(--accent); }
+    .row:hover > .td.col-rank,
+    .row:hover > .td.col-team,
+    .row:hover > .td.col-sigma { background: var(--surface2); }
+
+    .col-md { padding: 2px 3px; }
+    .md-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      border-radius: 4px;
+      padding: 3px 5px;
+      height: 100%;
+      width: 100%;
+    }
+    .md-opp {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 1;
+    }
+    .md-ha {
+      font-family: 'DM Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 1px;
+      opacity: .7;
+    }
+
+    /* Cell score classes — Fläche und Schriftfarbe gehören zusammen, sonst
+       verliert die helle Hälfte der Skala ihre Lesbarkeit. */
+    .bg3  { background: var(--c3bg);  color: var(--c3fg); }
+    .bg2  { background: var(--c2bg);  color: var(--c2fg); }
+    .bg1  { background: var(--c1bg);  color: var(--c1fg); }
+    .bg0  { background: var(--c0bg);  color: var(--c0fg); }
+    .bgm1 { background: var(--cm1bg); color: var(--cm1fg); }
+    .bgm2 { background: var(--cm2bg); color: var(--cm2fg); }
+    .bgm3 { background: var(--cm3bg); color: var(--cm3fg); }
+    .md-opp { color: inherit; }
+
+    /* Der Wert im Klartext. Damit hängt die Aussage nicht an der Farbe — der
+       einzige Weg, der bei jeder Form von Farbsehschwäche sicher trägt.
+       Eigenes Element neben H/A, weil verschachtelte opacity sich multipliziert
+       und die Zahl sonst blasser wäre als das Kürzel. */
+    .md-meta {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      line-height: 1;
+    }
+    .md-score {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: .5px;
+    }
+
+    /* Sigma colors */
+    .sig3  { color: var(--c3); }
+    .sig2  { color: var(--c2); }
+    .sig1  { color: var(--c1); }
+    .sig0  { color: var(--muted); }
+    .sigm1 { color: var(--cm1); }
+    .sigm2 { color: var(--cm2); }
+    .sigm3 { color: var(--cm3); }
+
+    .state-msg {
+      display: flex; align-items: center; justify-content: center;
+      padding: 60px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 600px) {
+      header { padding: 10px 16px; gap: 12px; }
+      .nav { gap: 4px; }
+      .nav a { font-size: 9px; padding: 8px 8px; }
+      .filter-bar { padding: 8px 16px; gap: 10px; flex-wrap: wrap; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .filter-bar, .table-section { animation: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">KICKBASE<span id="logo-subtitle">2. Bundesliga</span></div>
+    <nav class="nav">
+      <a href="index.html">Homepage</a>
+      <a href="teampunkte.html">Punkte pro Team</a>
+      <a href="matchup.html">Zugelassene Punkte</a>
+      <a href="scatter.html">Marktwert-Analyse</a>
+      <a href="scores-edit.html">Teamst&auml;rke</a>
+    </nav>
+  </header>
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <span class="filter-label">Spieltag</span>
+    <input type="number" class="day-input" id="day-from" min="1" max="34" value="1" />
+    <span class="filter-sep">&ndash;</span>
+    <input type="number" class="day-input" id="day-to"   min="1" max="34" value="34" />
+    <select class="mode-select" id="score-mode" title="Paarung: mit eigener Angriffsstärke. Spielplan: nur die Schwierigkeit des Gegners.">
+      <option value="pair">Paarung</option>
+      <option value="fixture">Nur Spielplan</option>
+    </select>
+    <div class="score-legend">
+      <!-- Die Punkte zeigen die Flächenfarben der Zellen, nicht die Schriftrampe —
+           sonst passt die Legende nicht zu dem, was in der Tabelle steht. -->
+      <div class="legend-item"><div class="legend-dot" style="background:var(--c3bg)"></div>+3</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--c2bg)"></div>+2</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--c1bg)"></div>+1</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--c0bg);border:1px solid var(--border)"></div>0</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--cm1bg)"></div>&minus;1</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--cm2bg)"></div>&minus;2</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--cm3bg)"></div>&minus;3</div>
+    </div>
+    <div class="filter-info" id="filter-info">18 Teams &middot; 34 Spieltage</div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-section" id="table-section">
+    <div class="state-msg">LADE&hellip;</div>
+  </div>
+
+</div>
+
+<script src="common.js"></script>
+<script>
+/* ── STATE ─────────────────────────────────────────────────
+   Das Matchup-Ranking bewertet die kommenden Spieltage und rechnet deshalb
+   immer mit der laufenden Saison. Die Scores kommen aus scores-edit.html —
+   dort wird auch entschieden, auf welcher Datenbasis sie entstehen.        */
+const LIGA = localStorage.getItem('kickbase_liga') || '2';
+let STORAGE_KEY = '', DATA_FILE = '', PLAN_FILE = '';
+let carry = null, cidx = null;
+
+async function initFiles() {
+  await loadSeasonManifest();
+  const suffix = currentSeason().suffix;
+  STORAGE_KEY = `kickbase_scores_bl${LIGA}${suffix}`;
+  DATA_FILE   = `data/data_${LIGA}${suffix}.json`;
+  PLAN_FILE   = `data/matchdays_bl${LIGA}${suffix}.json`;
+}
+let rawData       = null;
+let spielplan     = null;
+let currentScores = {};
+let baseScores    = {};
+let ratings       = null;
+let ratL          = null;
+let gespielteTage = 0;
+const SMIN = -3, SMAX = 3;
+const MODE_KEY = 'kickbase_score_mode';
+let scoreMode = localStorage.getItem(MODE_KEY) === 'fixture' ? 'fixture' : 'pair';
+
+function buildSpielplan(matchdaysData) {
+  const plan = {};
+  for (const md of matchdaysData.matchdays) {
+    for (const m of md.matches) {
+      if (!plan[m.t1sy]) plan[m.t1sy] = {};
+      plan[m.t1sy][String(m.day)] = { opponent_id: m.t2, opponent: m.t2sy, home: true };
+      if (!plan[m.t2sy]) plan[m.t2sy] = {};
+      plan[m.t2sy][String(m.day)] = { opponent_id: m.t1, opponent: m.t1sy, home: false };
+    }
+  }
+  return plan;
+}
+
+/* ── BOOT ──────────────────────────────────────────────── */
+async function boot() {
+  await initFiles();
+  document.getElementById('logo-subtitle').textContent =
+    (LIGA === '1' ? 'Bundesliga ' : '2. Bundesliga ') + currentSeason().label;
+  try {
+    const [dRes, sRes] = await Promise.all([
+      fetch(DATA_FILE), fetch(PLAN_FILE)
+    ]);
+    rawData          = await dRes.json();
+    const matchdays  = await sRes.json();
+    spielplan        = buildSpielplan(matchdays);
+
+    /* Vorbelegung des Spieltagsfilters: nächster Spieltag bis Ende der Hinrunde.
+       Das ist der Anwendungsfall — die Hinrunde am Stück bewerten, nicht die
+       nächste Partie. Seed 0, damit vor dem 1. Spieltag auch bei ST 1 begonnen
+       wird. Ist die Hinrunde durch, bleibt der Rest der Saison stehen. */
+    const totalDays  = matchdays.matchdays.reduce((max, md) => Math.max(max, md.day), 0) || 34;
+    const hinrunde   = hinrundeEnde(matchdays) || Math.floor(totalDays / 2);
+    const currentDay = matchdays.matchdays.reduce((max, md) =>
+      md.matches.some(m => m.st === 2) ? Math.max(max, md.day) : max, 0);
+    const dayFrom    = Math.min(currentDay + 1, totalDays);
+    document.getElementById('day-from').value = dayFrom;
+    document.getElementById('day-to').value   = dayFrom > hinrunde ? totalDays : hinrunde;
+    gespielteTage = playedDays(matchdays).size;
+
+    ratings = await loadRatings();
+    ratL    = ratingLeague(ratings, LIGA);
+
+    // Auf derselben Basis rechnen wie scores-edit.html. Aus dem Speicher kommt
+    // nur die Handkorrektur als Differenz — der Score selbst wird jedes Mal neu
+    // gebildet und veraltet damit nicht mehr zwischen zwei Spieltagen.
+    if (ratL) {
+      baseScores = ratingBaseScores(ratL, Object.keys(rawData.teams));
+    } else {
+      carry = await loadCarryover();
+      cidx  = carryIndex(carry, LIGA);
+      const axis = buildAxis(cidx, playedDays(matchdays), true);
+      baseScores = computeBaseScores(rawData, cidx, axis,
+                                     { from: 1, to: axis.length }, 0.95, SMIN);
+    }
+    currentScores = applyScoreDeltas(baseScores, readScoreStore(STORAGE_KEY), SMIN, SMAX);
+
+    const modeEl = document.getElementById('score-mode');
+    modeEl.value = scoreMode;
+    modeEl.disabled = !ratL;   // ohne Ratings gibt es nur den Gegnerwert
+    modeEl.addEventListener('change', function() {
+      scoreMode = this.value;
+      localStorage.setItem(MODE_KEY, scoreMode);
+      renderTable();
+    });
+    renderTable();
+  } catch(e) {
+    document.getElementById('table-section').innerHTML =
+      `<div class="state-msg">FEHLER: ${e.message}</div>`;
+  }
+}
+
+// Re-render when scores are changed in the editor tab
+window.addEventListener('storage', e => {
+  if (e.key !== STORAGE_KEY || !e.newValue) return;
+  currentScores = applyScoreDeltas(baseScores, readScoreStore(STORAGE_KEY), SMIN, SMAX);
+  renderTable();
+});
+
+/* ── TABLE RENDER ──────────────────────────────────────── */
+function renderTable() {
+  const { from, to } = getDayRange();
+  const days = [];
+  for (let d = from; d <= to; d++) days.push(d);
+
+  const abbrToId = {};
+  Object.entries(rawData.teams).forEach(([id, abbr]) => { abbrToId[abbr] = id; });
+
+  const rows = [];
+  Object.entries(spielplan).forEach(([abbr, mds]) => {
+    const teamId = abbrToId[abbr];
+    if (!teamId) return;
+    let sigma = 0;
+    const cells = days.map(d => {
+      const md = mds[String(d)];
+      if (!md) return null;
+      // md.home = dieses Team ist Heimteam → der Gegner steht auswärts
+      const side = md.home ? 'away' : 'home';
+      const os = currentScores[md.opponent_id], bs = baseScores[md.opponent_id];
+
+      // Der Score der Paarung berücksichtigt beide Kader: die Abwehr des
+      // Gegners und die Angriffsstärke des eigenen Teams. Ohne ratings.json
+      // bleibt es beim reinen Gegnerwert wie bisher.
+      // Zwei Lesarten derselben Ratings:
+      //   'pair'    — was die eigenen Spieler hier holen. Enthält die eigene
+      //               Angriffsstärke und ist damit teamübergreifend vergleichbar.
+      //   'fixture' — wie schwer die Partie für ein durchschnittliches Team
+      //               wäre. Die eigene Stärke fällt heraus, Σ vergleicht nur
+      //               noch Spielpläne.
+      const base = !ratL ? (bs ? bs[side] : 0)
+        : scoreMode === 'fixture' ? teamSideScore(ratL, md.opponent_id, side, SMIN)
+        : matchupScore(ratL, teamId, md.opponent_id, md.home, SMIN);
+      // Handkorrektur aus der Teamstärke-Seite als Verschiebung übernehmen.
+      const delta = os && bs ? os[side] - bs[side] : 0;
+      const score = Math.max(SMIN, Math.min(SMAX, base + delta));
+
+      sigma += score;
+      return { opp: md.opponent, home: md.home, score };
+    });
+    rows.push({ teamId, abbr, sigma, cells });
+  });
+
+  rows.sort((a,b) => b.sigma - a.sigma);
+
+  const colTemplate = `38px 60px 58px repeat(${days.length}, minmax(60px, 1fr))`;
+  const rowTemplate = `auto repeat(${rows.length}, 1fr)`;
+
+  const html = `<div class="rtable" style="grid-template-columns:${colTemplate};grid-template-rows:${rowTemplate}">
+    <div class="row">
+      <div class="th col-rank">#</div>
+      <div class="th col-team">Team</div>
+      <div class="th col-sigma">&Sigma;</div>
+      ${days.map(d => `<div class="th">ST${d}</div>`).join('')}
+    </div>
+    ${rows.map((row,i) => `<div class="row">
+      <div class="td col-rank">${i+1}</div>
+      <div class="td col-team">${row.abbr}</div>
+      <div class="td col-sigma ${sigC(row.sigma, days.length)}">${row.sigma>0?'+':''}${row.sigma}</div>
+      ${row.cells.map(cell => cell
+        ? `<div class="td col-md"><div class="md-inner ${bgc(cell.score)}">
+             <div class="md-opp">${cell.opp}</div>
+             <div class="md-meta"><span class="md-ha">${cell.home ? 'H' : 'A'}</span><span class="md-score">${cell.score > 0 ? '+' : ''}${cell.score}</span></div>
+           </div></div>`
+        : `<div class="td col-md"><div class="md-inner bg0" style="opacity:.25">
+             <div class="md-opp">&mdash;</div>
+           </div></div>`
+      ).join('')}
+    </div>`).join('')}
+  </div>`;
+
+  document.getElementById('table-section').innerHTML = html;
+  document.getElementById('filter-info').textContent =
+    `${rows.length} Teams \u00b7 ST\u00a0${from}\u2013${to} (${days.length} Spieltage)`
+    + (!ratL ? ' \u00b7 Rohmittel'
+       : ratingsDays(ratL) < gespielteTage
+         ? ` \u00b7 gegnerbereinigt (VERALTET: Stand ${ratingsDays(ratL)} von ${gespielteTage} ST)`
+         : scoreMode === 'fixture' ? ' \u00b7 gegnerbereinigt \u00b7 \u03a3 nur Spielplan'
+         : ' \u00b7 gegnerbereinigt');
+}
+
+/* ── HELPERS ───────────────────────────────────────────── */
+function getDayRange() {
+  let from = parseInt(document.getElementById('day-from').value, 10);
+  let to   = parseInt(document.getElementById('day-to').value, 10);
+  from = isNaN(from) ? 1  : Math.max(1, Math.min(34, from));
+  to   = isNaN(to)   ? 34 : Math.max(1, Math.min(34, to));
+  if (from > to) to = from;
+  return { from, to };
+}
+
+function bgc(v) {
+  return ({3:'bg3',2:'bg2',1:'bg1',0:'bg0','-1':'bgm1','-2':'bgm2','-3':'bgm3'})[String(v)] || 'bg0';
+}
+function sigC(sigma, days) {
+  if (sigma === 0) return 'sig0';
+  const avg = sigma / (days || 1);
+  if (sigma > 0) return avg > 1.5 ? 'sig3' : avg > 0.7 ? 'sig2' : 'sig1';
+  return avg < -1.5 ? 'sigm3' : avg < -0.7 ? 'sigm2' : 'sigm1';
+}
+function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
+
+/* ── FILTER LISTENERS ──────────────────────────────────── */
+['day-from','day-to'].forEach(elId => {
+  document.getElementById(elId).addEventListener('change', function() {
+    const fe = document.getElementById('day-from');
+    const te = document.getElementById('day-to');
+    let from = parseInt(fe.value, 10);
+    let to   = parseInt(te.value, 10);
+    from = Math.max(1, Math.min(34, isNaN(from) ? 1  : from));
+    to   = Math.max(1, Math.min(34, isNaN(to)   ? 34 : to));
+    if (elId === 'day-from' && from > to) to   = from;
+    if (elId === 'day-to'   && to < from) from = to;
+    fe.value = from; te.value = to;
+    renderTable();
+  });
+});
+
+boot();
+</script>
+</body>
+</html>

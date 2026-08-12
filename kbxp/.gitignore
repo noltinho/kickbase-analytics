@@ -1,0 +1,19 @@
+# Zwischenstaende des Crawls/Backfills - jederzeit reproduzierbar
+data/raw/
+data/interim/
+output/
+reports/figures/
+
+# data/processed/ wird bewusst NICHT ignoriert. Ohne panel.parquet
+# ueberspringt tests/test_panel_matches_archive.py beide Tests und meldet
+# trotzdem Exit-Code 0 - auf einem frischen Clone waere die Kreuzvalidierung
+# unsichtbar, und ihn selbst zu erzeugen kostet Stunden Crawl-Zeit.
+
+# data/manual/ wird bewusst NICHT ignoriert: handgepflegt und damit als
+# einziges Verzeichnis unter data/ nicht reproduzierbar - geht es verloren,
+# ist es weg.
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/

@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kickbase · Matchup Rechner</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #131417;
+      --surface: #1a1d21;
+      --surface2: #21252a;
+      --border: #2f363f;
+      --text: #dee4ec;
+      --muted: #7e8187;
+      --accent: #ff4600;
+      --accent2: #ff5f3a;
+      --accent3: #3ab8ff;
+      --tw: #3ab8ff;
+      --abw: #5dde84;
+      --mit: #f5a623;
+      --stu: #ff5f3a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { overscroll-behavior-x: none; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      min-height: 100vh;
+      overflow-x: hidden;
+      overscroll-behavior-x: none;
+    }
+
+    /* ─── HEADER ─────────────────────────────────────── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      position: sticky;
+      top: 0;
+      background: rgba(19, 20, 23, 0.92);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+    }
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 26px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .logo span { color: var(--muted); font-size: 14px; display: block; letter-spacing: 3px; }
+    .header-meta {
+      margin-left: 24px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      line-height: 1.8;
+    }
+    #generated-at { color: var(--text); }
+    .nav {
+      display: flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+    .nav a {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      text-decoration: none;
+      color: var(--muted);
+      padding: 10px 14px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      transition: all .15s;
+    }
+    .nav a:hover { color: var(--text); border-color: var(--border); }
+    .nav a.active { color: #131417; background: var(--accent); border-color: var(--accent); font-weight: 500; }
+    .nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ─── LAYOUT ─────────────────────────────────────── */
+    .wrapper {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+
+    /* ─── FILTER BAR ─────────────────────────────────── */
+    .filter-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr auto auto;
+      gap: 12px;
+      margin-bottom: 32px;
+      align-items: end;
+    }
+    .filter-group label {
+      display: block;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .filter-group select,
+    .filter-group input[type="number"] {
+      width: 100%;
+    }
+    .day-range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .day-range-wrap input[type="number"] {
+      width: 60px;
+      flex-shrink: 0;
+    }
+    .day-range-sep {
+      color: var(--muted);
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    input[type="number"] {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      padding: 9px 10px;
+      border-radius: 6px;
+      outline: none;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type="number"]:hover,
+    input[type="number"]:focus { border-color: var(--accent); }
+    select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      padding: 9px 12px;
+      border-radius: 6px;
+      outline: none;
+      cursor: pointer;
+      transition: border-color .2s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237e8187'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+    select:hover, select:focus { border-color: var(--accent); }
+
+
+
+    .toggle-group {
+      display: flex;
+      gap: 6px;
+    }
+    .toggle-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1px;
+      padding: 10px 14px;
+      min-height: 40px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .toggle-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #131417;
+      font-weight: 500;
+    }
+    .toggle-btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+    .toggle-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ─── STATS ROW ──────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+    .stat-card:nth-child(2)::before { background: var(--accent2); }
+    .stat-card:nth-child(3)::before { background: var(--accent3); }
+    .stat-card:nth-child(4)::before { background: #b45fff; }
+    .stat-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 36px;
+      letter-spacing: 1px;
+      line-height: 1;
+    }
+    .stat-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ─── CHART AREA ─────────────────────────────────── */
+    .chart-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px 28px;
+      margin-bottom: 28px;
+    }
+    .chart-header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .chart-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 2px;
+      color: var(--text);
+    }
+    .chart-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+    }
+    .chart-wrap {
+      position: relative;
+      height: 320px;
+    }
+
+    /* ─── POS LEGEND ─────────────────────────────────── */
+    .pos-legend {
+      display: flex;
+      gap: 18px;
+      margin-left: auto;
+    }
+    .pos-dot {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .pos-dot::before {
+      content: '';
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      background: var(--c);
+    }
+
+    /* ─── TABLE ──────────────────────────────────────── */
+    .table-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .table-scroll {
+      overflow-y: auto;
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      z-index: 1;
+    }
+    .table-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .table-header .chart-title { font-size: 18px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    thead th {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      padding: 7px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    thead th:hover { color: var(--accent); }
+    thead th.sorted { color: var(--accent); }
+    thead th:not(:first-child) { text-align: right; }
+    tbody tr {
+      border-bottom: 1px solid rgba(39,43,54,.5);
+      transition: background .1s;
+    }
+    tbody tr:hover { background: var(--surface2); }
+    tbody tr:last-child { border-bottom: none; }
+    td {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    td:not(:first-child) { text-align: right; font-family: 'DM Mono', monospace; }
+    .rank {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      width: 32px;
+      display: inline-block;
+    }
+    .team-name { font-weight: 500; }
+    .bar-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bar-bg {
+      width: 55px;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--accent);
+      transition: width .4s ease;
+    }
+
+    /* ─── LOADING / EMPTY ────────────────────────────── */
+    .state-msg {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+    }
+    .state-msg strong {
+      display: block;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      color: var(--text);
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+
+    /* ─── ANIMATE ────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .wrapper > * {
+      animation: fadeUp .35s ease both;
+    }
+    .wrapper > *:nth-child(1) { animation-delay: .05s; }
+    .wrapper > *:nth-child(2) { animation-delay: .12s; }
+    .wrapper > *:nth-child(3) { animation-delay: .19s; }
+    .wrapper > *:nth-child(4) { animation-delay: .26s; }
+
+    /* ─── SCROLLBAR ──────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    @media (max-width: 900px) {
+      .filter-bar { grid-template-columns: 1fr 1fr; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      header { padding: 16px 20px; }
+      .wrapper { padding: 20px; }
+    }
+
+    @media (max-width: 600px) {
+      .filter-bar { grid-template-columns: 1fr; }
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .nav { gap: 4px; }
+      .nav a { font-size: 10px; padding: 8px 10px; }
+      .header-meta { display: none; }
+    }
+
+    input[type="number"]:focus-visible,
+    select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .wrapper > * { animation: none; }
+      .card, .bar-fill { transition: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    Kickbase
+    <span id="logo-subtitle">2. BUNDESLIGA ANALYSE</span>
+  </div>
+  <div class="header-meta">
+    <div>DATENBASIS</div>
+    <div id="generated-at">—</div>
+  </div>
+  <nav class="nav">
+    <a href="index.html">Homepage</a>
+    <a href="teampunkte.html">Punkte pro Team</a>
+    <a href="score.html">Matchup-Ranking</a>
+    <a href="scatter.html">Marktwert-Analyse</a>
+    <a href="scores-edit.html">Teamst&auml;rke</a>
+  </nav>
+</header>
+
+<div class="wrapper">
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Saison</label>
+      <select id="filter-season"><!-- aus data/seasons.json gefüllt --></select>
+    </div>
+
+    <div class="filter-group">
+      <label>Position</label>
+      <select id="filter-pos">
+        <option value="all">Alle Positionen</option>
+        <option value="1">TW — Torwart</option>
+        <option value="2">ABW — Abwehr</option>
+        <option value="3">MIT — Mittelfeld</option>
+        <option value="4">STU — Sturm</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Heim / Auswärts</label>
+      <select id="filter-venue">
+        <option value="all">Alle Spiele</option>
+        <option value="home">Heimspiele</option>
+        <option value="away">Auswärtsspiele</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Spieltag von / bis</label>
+      <div class="day-range-wrap">
+        <input type="number" id="day-from" min="1" max="34" value="1" />
+        <span class="day-range-sep">–</span>
+        <input type="number" id="day-to"   min="1" max="34" value="34" />
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <label>Sortierung</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" id="sort-desc">↓ Mehr</button>
+        <button class="toggle-btn"        id="sort-asc">↑ Weniger</button>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <label>Ansicht</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" id="view-total">TOTAL</button>
+        <button class="toggle-btn"        id="view-avg">⌀ PRO ST</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS CARDS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Meiste zugel. Punkte</div>
+      <div class="stat-value" id="stat-max-pts">—</div>
+      <div class="stat-sub" id="stat-max-team">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Wenigste zugel. Punkte</div>
+      <div class="stat-value" id="stat-min-pts">—</div>
+      <div class="stat-sub" id="stat-min-team">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Liga-Durchschnitt</div>
+      <div class="stat-value" id="stat-avg-pts">—</div>
+      <div class="stat-sub">Pro Team im Zeitraum</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Gesamt Punkte</div>
+      <div class="stat-value" id="stat-total-pts">—</div>
+      <div class="stat-sub" id="stat-game-count">— Spieltage</div>
+    </div>
+  </div>
+
+  <!-- BAR CHART -->
+  <div class="chart-section">
+    <div class="chart-header">
+      <div class="chart-title">ZUGELASSENE PUNKTE</div>
+      <div class="chart-subtitle" id="chart-subtitle">Pro Team</div>
+      <div class="pos-legend" style="margin-left:auto;">
+        <div class="pos-dot" style="--c:var(--tw)">TW</div>
+        <div class="pos-dot" style="--c:var(--abw)">ABW</div>
+        <div class="pos-dot" style="--c:var(--mit)">MIT</div>
+        <div class="pos-dot" style="--c:var(--stu)">STU</div>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="bar-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-section">
+    <div class="table-header">
+      <div class="chart-title">RANKING</div>
+      <div class="chart-subtitle" id="table-subtitle">Alle Teams</div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th class="sorted" id="th-pts">PUNKTE ↓</th>
+            <th id="th-tw">TW</th>
+            <th id="th-abw">ABW</th>
+            <th id="th-mit">MIT</th>
+            <th id="th-stu">STU</th>
+            <th id="th-games">SPIELE</th>
+            <th id="th-avg">⌀ / ST</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr><td colspan="8"><div class="state-msg"><strong>LADEN…</strong>data_2.json wird gelesen</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="common.js"></script>
+<script>
+/* ─── Positionsbezeichnungen und Farben je Position ─────── */
+const POS_LABEL = { 1:'TW', 2:'ABW', 3:'MIT', 4:'STU' };
+const POS_COLOR = { 1:'#3ab8ff', 2:'#5dde84', 3:'#f5a623', 4:'#ff5f3a' };
+const ACCENT    = '#ff4600';
+
+/* ─── Chart.js-Erweiterung: Gesamtpunkte oberhalb jedes Balkens ── */
+Chart.register({
+  id: 'totalLabels',
+  afterDatasetsDraw(chart) {
+    const numDS = chart.data.datasets.length;
+    const dataCount = chart.data.labels.length;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.font = '500 10px "DM Mono", monospace';
+    ctx.fillStyle = '#dee4ec';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    for (let i = 0; i < dataCount; i++) {
+      let minY = Infinity, barX = 0, total = 0;
+      for (let d = 0; d < numDS; d++) {
+        const meta = chart.getDatasetMeta(d);
+        if (meta.hidden) continue;
+        const bar = meta.data[i];
+        if (bar && bar.y < minY) { minY = bar.y; barX = bar.x; }
+        total += Number(chart.data.datasets[d].data[i]) || 0;
+      }
+      if (total > 0 && minY !== Infinity)
+        ctx.fillText(total.toLocaleString('de'), barX, minY - 5);
+    }
+    ctx.restore();
+  }
+});
+
+/* ─── Globale Zustandsvariablen (Filter, Sortierung usw.) ── */
+let rawData = null;
+let matchdays = null;
+let carry = null;   // data/carryover.json
+let cidx  = null;   // Vorsaison-Index der Liga — nur in der Aggregat-Sicht
+let axis  = [];     // Vorsaison + laufende Saison als durchgehende Achse
+let liga = '2';
+let season = SEASON_AGG;
+let chartInstance = null;
+let sortDir = 'desc';
+let useAvg = false;
+
+/* Saison-Manifest, Vorsaison-Übertrag und Achse kommen aus common.js. */
+
+/* ─── Seite laden: JSON holen und Dashboard starten ─── */
+async function boot() {
+  liga = localStorage.getItem('kickbase_liga') || '2';
+  await loadSeasonManifest();
+  season = fillSeasonSelect(document.getElementById('filter-season'), storedSeason());
+  saveSeason(season);
+  carry = await loadCarryover();
+  await loadSeason();
+}
+
+async function loadSeason() {
+  // Die aggregierte Sicht rechnet mit den Dateien der laufenden Saison; die
+  // Vorsaison kommt kompakt aus carryover.json.
+  const suffix    = seasonInfo(season).suffix;
+  const dataFile  = `data/data_${liga}${suffix}.json`;
+  const matchFile = `data/matchdays_bl${liga}${suffix}.json`;
+  cidx = isAgg(season) ? carryIndex(carry, liga) : null;
+
+  document.getElementById('logo-subtitle').textContent =
+    (liga === '1' ? 'BUNDESLIGA ANALYSE' : '2. BUNDESLIGA ANALYSE')
+    + ` (${seasonLabel(season)})`;
+
+  rawData = null;
+  matchdays = null;
+  try {
+    // Der Spielplan sagt, welche Spieltage wirklich gespielt sind — ohne ihn
+    // zählen die noch leeren Spieltage als echte Nullen mit.
+    const [r, m] = await Promise.all([fetch(dataFile), fetch(matchFile).catch(e => e)]);
+    if (!r.ok) throw new Error(r.status);
+    rawData = await r.json();
+    if (m instanceof Response && m.ok) {
+      try { matchdays = await m.json(); } catch (_) { matchdays = null; }
+    }
+    document.getElementById('generated-at').textContent =
+      new Date(rawData.generated_at).toLocaleString('de-DE', {
+        day:'2-digit', month:'2-digit', year:'numeric',
+        hour:'2-digit', minute:'2-digit'
+      });
+    initAxis();
+    render();
+  } catch(e) {
+    document.getElementById('table-body').innerHTML =
+      `<tr><td colspan="8"><div class="state-msg">
+        <strong>KEINE DATEN</strong>
+        ${dataFile} nicht gefunden — bitte fetch.py ausführen.<br/>
+        <small style="opacity:.5">${e}</small>
+      </div></td></tr>`;
+  }
+}
+
+/* ─── Achse aufbauen und Spieltag-Inputs darauf setzen ─── */
+function initAxis() {
+  const days = matchdays ? playedDays(matchdays) : playedDaysFallback(rawData);
+  axis = buildAxis(cidx, days, isAgg(season));
+  const r = defaultRange(axis);
+  const fromEl = document.getElementById('day-from');
+  const toEl   = document.getElementById('day-to');
+  fromEl.min = toEl.min = 1;
+  fromEl.max = toEl.max = Math.max(1, axis.length);
+  fromEl.value = r.from;
+  toEl.value   = r.to;
+}
+
+function getRange() {
+  return {
+    from: +document.getElementById('day-from').value,
+    to:   +document.getElementById('day-to').value
+  };
+}
+
+/* ─── Daten filtern und Punkte je Team aufsummieren ──────── */
+function compute() {
+  if (!rawData) return {};
+  const posFilter   = document.getElementById('filter-pos').value;
+  const venueFilter = document.getElementById('filter-venue').value;
+  const { from, to } = getRange();
+  const span = axis.slice(from - 1, to);
+
+  // teamId → { total, byPos, games: Set }
+  const teams = {};
+  Object.keys(rawData.teams).forEach(id => {
+    teams[id] = { total:0, byPos:{1:0,2:0,3:0,4:0}, games: new Set() };
+  });
+
+  // Vorsaison: fertig vorberechnet, Auf-/Absteiger über den gelernten Faktor
+  // auf das Niveau der neuen Liga skaliert.
+  span.filter(a => a.season === 'prev').forEach(a => {
+    Object.keys(teams).forEach(id => {
+      const d = carryDay(cidx, id, a.day);
+      if (!d) return;
+      if (venueFilter === 'home' && !d.home) return;   // d.home = Team spielte zuhause
+      if (venueFilter === 'away' &&  d.home) return;
+      teams[id].games.add('V' + a.day);
+      [1,2,3,4].forEach(pos => {
+        if (posFilter !== 'all' && String(pos) !== posFilter) return;
+        const v = carryVal(cidx, id, d, 'conceded', pos);
+        teams[id].total += v;
+        teams[id].byPos[pos] += v;
+      });
+      // Spieler ohne Position: in die Summe, in keinen Balken — wie in der
+      // laufenden Saison auch.
+      if (posFilter === 'all') {
+        teams[id].total += carryUnpositioned(cidx, id, d, 'conceded');
+      }
+    });
+  });
+
+  const curDays = new Set(span.filter(a => a.season === 'cur').map(a => a.day));
+
+  rawData.players.forEach(player => {
+    const pos = player.position;
+    // Für einzelne Rand-Spieler führt Kickbase überhaupt keine Position. Sie
+    // zählen in die Teamsumme, aber in keinen Balkenabschnitt — die Abschnitte
+    // summieren dadurch knapp unter die Summe. Sie zu verwerfen hieße, die
+    // zugelassenen Punkte des Gegners zu niedrig auszuweisen.
+    const hasPos = !!POS_LABEL[pos];
+
+    player.performance.forEach(entry => {
+      if (!curDays.has(entry.day)) return;
+      if (venueFilter === 'home' && entry.home) return;   // entry.home = Spieler war Heimteam → Gegner war Auswärts
+      if (venueFilter === 'away' && !entry.home) return;
+
+      const opp = entry.opponent;
+      if (!teams[opp]) return;
+
+      // Nur gespielte Tage zählen (points > 0 = Spiel hat stattgefunden)
+      if (entry.points > 0) teams[opp].games.add(entry.day);
+
+      // Punkte nur addieren wenn Position zum Filter passt
+      if (posFilter !== 'all' && String(pos) !== posFilter) return;
+      teams[opp].total += entry.points;
+      if (hasPos) teams[opp].byPos[pos] = (teams[opp].byPos[pos] || 0) + entry.points;
+    });
+  });
+
+  return teams;
+}
+
+/* ─── Hauptfunktion: sortiert Daten und aktualisiert alles ── */
+function render() {
+  const teams = compute();
+  const { from, to } = getRange();
+  const posFilter = document.getElementById('filter-pos').value;
+
+  const rows = Object.entries(teams).map(([id, d]) => ({
+    id,
+    name: rawData.teams[id] || id,
+    note: cidx ? carryNote(cidx, id, 'conceded') : '',
+    total: Math.round(d.total),
+    byPos: Object.fromEntries([1,2,3,4].map(p => [p, Math.round(d.byPos[p])])),
+    games: d.games.size,
+    avg:   d.games.size ? Math.round(d.total / d.games.size) : 0
+  }));
+
+  rows.sort((a,b) => sortDir === 'desc'
+    ? (useAvg ? b.avg - a.avg : b.total - a.total)
+    : (useAvg ? a.avg - b.avg : a.total - b.total));
+
+  updateStats(rows);
+  renderChart(rows, posFilter);
+  renderTable(rows);
+
+  const scaled = rows.filter(r => r.note).map(r => r.name);
+  const sub = `ST ${rangeLabel(axis, from, to)}`
+            + (posFilter !== 'all' ? ' · ' + POS_LABEL[posFilter] : '')
+            + (scaled.length ? ` · * = Vorsaison skaliert (${scaled.join(', ')})` : '');
+  document.getElementById('chart-subtitle').textContent = sub;
+  document.getElementById('table-subtitle').textContent = sub;
+}
+
+/* ─── Die 4 Kennzahl-Karten oben befüllen ───────────────── */
+function updateStats(rows) {
+  if (!rows.length) return;
+  const vals = rows.map(r => useAvg ? r.avg : r.total);
+  const max = rows[sortDir === 'desc' ? 0 : rows.length-1];
+  const min = rows[sortDir === 'desc' ? rows.length-1 : 0];
+  const sum = vals.reduce((a,b) => a+b, 0);
+
+  document.getElementById('stat-max-pts').textContent  = (useAvg ? max.avg : max.total).toLocaleString('de');
+  document.getElementById('stat-max-team').textContent = max.name + (useAvg ? ' (⌀/ST)' : ' gesamt');
+  document.getElementById('stat-min-pts').textContent  = (useAvg ? min.avg : min.total).toLocaleString('de');
+  document.getElementById('stat-min-team').textContent = min.name + (useAvg ? ' (⌀/ST)' : ' gesamt');
+  document.getElementById('stat-avg-pts').textContent  = Math.round(sum / rows.length).toLocaleString('de');
+  document.getElementById('stat-total-pts').textContent = sum.toLocaleString('de');
+  const { from, to } = getRange();
+  document.getElementById('stat-game-count').textContent =
+    `ST ${rangeLabel(axis, from, to)} (${to-from+1} Spieltage)`;
+}
+
+/* ─── Balkendiagramm zeichnen (gestapelt oder einfach) ───── */
+function renderChart(rows, posFilter) {
+  const ctx = document.getElementById('bar-chart').getContext('2d');
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+  const labels = rows.map(r => r.name);
+  const isAllPos = posFilter === 'all';
+
+  let datasets;
+  if (isAllPos) {
+    datasets = [1,2,3,4].map(pos => ({
+      label: POS_LABEL[pos],
+      data: rows.map(r => useAvg
+        ? (r.games ? Math.round(r.byPos[pos] / r.games) : 0)
+        : r.byPos[pos]),
+      backgroundColor: POS_COLOR[pos] + 'cc',
+      borderColor: POS_COLOR[pos],
+      borderWidth: 1,
+      borderRadius: 3,
+      stack: 'stack'
+    }));
+  } else {
+    datasets = [{
+      label: POS_LABEL[posFilter] || 'Gesamt',
+      data: rows.map(r => useAvg ? r.avg : r.total),
+      backgroundColor: ACCENT + 'bb',
+      borderColor: ACCENT,
+      borderWidth: 1,
+      borderRadius: 4
+    }];
+  }
+
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 350 },
+      layout: { padding: { top: 28 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#21252a',
+          borderColor: '#2f363f',
+          borderWidth: 1,
+          titleColor: '#dee4ec',
+          bodyColor: '#7e8187',
+          titleFont: { family: 'Bebas Neue', size: 15, letterSpacing: 2 },
+          bodyFont: { family: 'DM Mono', size: 11 },
+          padding: 12,
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('de')} Pkt`
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: isAllPos,
+          grid: { display: false },
+          ticks: {
+            color: '#7e8187',
+            font: { family: 'DM Mono', size: 11 }
+          },
+          border: { color: '#2f363f' }
+        },
+        y: {
+          stacked: isAllPos,
+          grid: { color: '#21252a' },
+          ticks: {
+            color: '#7e8187',
+            font: { family: 'DM Mono', size: 10 },
+            callback: v => v.toLocaleString('de')
+          },
+          border: { color: '#2f363f' }
+        }
+      }
+    }
+  });
+}
+
+/* ─── Ranglisten-Tabelle zeilenweise aufbauen ────────────── */
+function renderTable(rows) {
+  const maxVal = rows.length ? Math.max(...rows.map(r => useAvg ? r.avg : r.total)) : 1;
+  const tbody = document.getElementById('table-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="state-msg"><strong>KEINE DATEN</strong>Filter anpassen.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((r, i) => {
+    const val = useAvg ? r.avg : r.total;
+    const pct = maxVal ? Math.round(val / maxVal * 100) : 0;
+    const posFilter = document.getElementById('filter-pos').value;
+    const showBreakdown = posFilter === 'all';
+    return `<tr>
+      <td><span class="rank">${i+1}</span></td>
+      <td>
+        <div class="bar-inline">
+          <span class="team-name" title="${r.note}">${r.name}${r.note ? '*' : ''}</span>
+          <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <span style="font-family:'DM Mono',monospace;font-size:12px;">${val.toLocaleString('de')}</span>
+        </div>
+      </td>
+      <td style="color:var(--tw)">${(showBreakdown ? r.byPos[1] : '—').toLocaleString ? (showBreakdown ? r.byPos[1] : '—') : '—'}</td>
+      <td style="color:var(--abw)">${showBreakdown ? r.byPos[2].toLocaleString('de') : '—'}</td>
+      <td style="color:var(--mit)">${showBreakdown ? r.byPos[3].toLocaleString('de') : '—'}</td>
+      <td style="color:var(--stu)">${showBreakdown ? r.byPos[4].toLocaleString('de') : '—'}</td>
+      <td>${r.games}</td>
+      <td>${r.avg.toLocaleString('de')}</td>
+    </tr>`;
+  }).join('');
+
+  // TW-Spalte auf '—' setzen wenn ein Positionsfilter aktiv ist
+  tbody.querySelectorAll('td[style*="--tw"]').forEach(td => {
+    const posFilter = document.getElementById('filter-pos').value;
+    if (posFilter !== 'all') td.textContent = '—';
+  });
+}
+
+/* ─── Filter-Dropdowns und Spieltag-Inputs überwachen ────── */
+document.getElementById('filter-season').addEventListener('change', function() {
+  season = this.value;
+  saveSeason(season);
+  loadSeason();
+});
+
+['filter-pos','filter-venue'].forEach(id =>
+  document.getElementById(id).addEventListener('change', render));
+
+['day-from','day-to'].forEach(id => {
+  document.getElementById(id).addEventListener('change', function() {
+    clampRange(document.getElementById('day-from'),
+               document.getElementById('day-to'),
+               axis, id === 'day-from' ? 'from' : 'to');
+    render();
+  });
+});
+
+/* ─── Sortier- und Ansicht-Buttons überwachen ────────────── */
+
+document.getElementById('sort-desc').addEventListener('click', function() {
+  sortDir = 'desc';
+  this.classList.add('active');
+  document.getElementById('sort-asc').classList.remove('active');
+  render();
+});
+document.getElementById('sort-asc').addEventListener('click', function() {
+  sortDir = 'asc';
+  this.classList.add('active');
+  document.getElementById('sort-desc').classList.remove('active');
+  render();
+});
+
+document.getElementById('view-total').addEventListener('click', function() {
+  useAvg = false;
+  this.classList.add('active');
+  document.getElementById('view-avg').classList.remove('active');
+  render();
+});
+document.getElementById('view-avg').addEventListener('click', function() {
+  useAvg = true;
+  this.classList.add('active');
+  document.getElementById('view-total').classList.remove('active');
+  render();
+});
+
+boot();
+</script>
+</body>
+</html>

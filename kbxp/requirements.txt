@@ -1,0 +1,13 @@
+# Datenschicht
+requests>=2.32
+pandas>=2.2
+pyarrow>=16.0
+
+# Modell. numpy kaeme zwar mit pandas mit, scipy aber nicht - es traegt die
+# Rangkorrelation in score_metrics und die Nullstellensuche, mit der die
+# Buchmachermarge aus den Saisonquoten gerechnet wird.
+numpy>=1.26
+scipy>=1.11
+
+# Test
+pytest>=8.0

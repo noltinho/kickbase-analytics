@@ -1,0 +1,17 @@
+# Zugangsdaten
+.env
+
+# Python
+venv/
+__pycache__/
+
+# IDE / Werkzeug-Konfiguration
+.vs/
+.vscode/
+.claude/
+
+# Backups
+backup_*/
+
+# Arbeitskopien der Datenordner
+data_backup/
