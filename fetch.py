@@ -400,14 +400,34 @@ def market_value_at(players: dict, pid: str, dt: int) -> int | None:
 # --------------------------------------------------------------------------
 
 def extract_season(payload: dict, season: dict, league: str, seed_team: str,
-                   match_results: dict | None = None) -> list[dict]:
+                   match_results: dict | None = None,
+                   verworfen: list | None = None) -> list[dict]:
     """Spieltagspunkte einer Saison aus der /performance-Antwort ziehen.
 
     Sammelt nebenbei Endergebnisse fuer die Matchday-Rekonstruktion ein, auch
     aus Eintraegen ohne Einsatz - fuer abgeschlossene Saisons liefert
     /matchdays laengst den aktuellen Spielplan.
+
+    ``pt`` (Team des Spielers) wird nie geglaubt, ohne es gegen die Paarung
+    ``t1``/``t2`` zu pruefen - in 2021/22 nannte es reihenweise Vereine, die
+    am Spiel gar nicht beteiligt waren. Passt es nicht, entscheidet die
+    Haeufigkeit ueber die Saison: das Team der Paarung, das in den Paarungen
+    des Spielers klar dominiert (mindestens doppelt so oft wie das andere),
+    ist seins; ``seed_team`` (der Kaderstand) dient als letzter
+    Stichentscheid. Was dann noch offen ist, wird verworfen wie bisher -
+    aber gezaehlt (``verworfen``), nicht still.
+
+    Jeder Eintrag traegt ``team``: die so validierte Team-ID **dieses
+    Spieltags**. Sommer- wie Winterwechsler sind damit je Spiel richtig
+    attribuiert; das eine ``team_id`` am Spielerdatensatz bleibt der
+    Kaderstand.
+
+    Wechselt ein Spieler innerhalb der Liga, liefern beide Klubs ihre Partie
+    desselben Spieltags in seine Historie (Knoche/Omlin-Fall). Es gewinnt
+    die Zeile mit den meisten Minuten - dieselbe Regel wie in
+    ``kbxp/src/ingest/backfill_history.consolidate``.
     """
-    points = []
+    roh = []
     for entry_season in payload.get("it", []) or []:
         if season["title"] not in (entry_season.get("ti") or ""):
             continue
@@ -415,33 +435,61 @@ def extract_season(payload: dict, season: dict, league: str, seed_team: str,
         if entry_season.get("n", "") != league:
             continue
 
-        last_pt = seed_team
         for entry in entry_season.get("ph", []) or []:
             if match_results is not None and entry.get("mdst") == 2 and entry.get("t1g") is not None:
                 key = (entry.get("day"), str(entry.get("t1")), str(entry.get("t2")))
                 match_results[key] = (entry.get("t1g"), entry.get("t2g"))
 
-            # pt kann einzeln fehlen; letzten bekannten Wert fortschreiben
-            pt = str(entry.get("pt") or "") or last_pt
-            last_pt = pt
             t1, t2 = str(entry.get("t1", "")), str(entry.get("t2", ""))
+            if t1 and t2:
+                roh.append((entry, str(entry.get("pt") or ""), t1, t2))
 
-            if pt == t1:
-                opponent, home = t2, True
-            elif pt == t2:
-                opponent, home = t1, False
+    # Team-Haeufigkeit ueber alle Paarungen der Saison
+    zaehler: dict[str, int] = {}
+    for _, _, t1, t2 in roh:
+        zaehler[t1] = zaehler.get(t1, 0) + 1
+        zaehler[t2] = zaehler.get(t2, 0) + 1
+
+    points = []
+    for entry, pt, t1, t2 in roh:
+        if pt in (t1, t2):
+            team = pt
+        else:
+            a, b = sorted((t1, t2), key=lambda t: zaehler.get(t, 0), reverse=True)
+            if zaehler.get(a, 0) >= 2 and zaehler.get(a, 0) >= 2 * zaehler.get(b, 0):
+                team = a
+            elif seed_team in (t1, t2):
+                team = seed_team
             else:
+                if verworfen is not None:
+                    verworfen.append(entry.get("day"))
                 continue
 
-            p = entry.get("p")
-            points.append({
-                "day": entry.get("day"),
-                "points": p if p is not None else 0,
-                "opponent": opponent,
-                "home": home,
-                "minutes": entry.get("mp") or "0'",
-            })
-    return points
+        p = entry.get("p")
+        points.append({
+            "day": entry.get("day"),
+            "points": p if p is not None else 0,
+            "opponent": t2 if team == t1 else t1,
+            "home": team == t1,
+            "team": team,
+            "minutes": entry.get("mp") or "0'",
+        })
+
+    # Dedupe je Spieltag: die Zeile mit den meisten Minuten gewinnt.
+    beste: dict[int, dict] = {}
+    for row in points:
+        alt = beste.get(row["day"])
+        if alt is None or parse_minutes_num(row["minutes"]) > parse_minutes_num(alt["minutes"]):
+            beste[row["day"]] = row
+    return [beste[d] for d in sorted(beste)]
+
+
+def parse_minutes_num(value: object) -> int:
+    """``"87'"`` -> 87."""
+    try:
+        return int(str(value or "").strip().rstrip("'") or 0)
+    except ValueError:
+        return 0
 
 
 def fetch_performances(client: KickbaseClient, comp: dict, season: dict,
@@ -460,6 +508,7 @@ def fetch_performances(client: KickbaseClient, comp: dict, season: dict,
             prefer=comp["id"], pid=pid)
         return pid, data
 
+    verworfen: list = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = {ex.submit(fetch_one, pid): pid for pid in players}
         for fut in as_completed(futures):
@@ -470,10 +519,14 @@ def fetch_performances(client: KickbaseClient, comp: dict, season: dict,
             seed = players[pid].get("team_id", "")
             with lock:
                 result[pid] = extract_season(
-                    data, season, comp["league"], seed, match_results) if data else []
+                    data, season, comp["league"], seed,
+                    match_results, verworfen) if data else []
 
     ohne = sum(1 for v in result.values() if not v)
     print(f"  ✓ {total - ohne} Spieler mit Spieltagsdaten ({ohne} ohne)")
+    if verworfen:
+        print(f"  ⚠ {len(verworfen)} Eintraege verworfen - Team trotz "
+              f"Haeufigkeitsregel nicht bestimmbar")
     return result
 
 

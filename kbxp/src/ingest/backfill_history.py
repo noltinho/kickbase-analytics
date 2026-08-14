@@ -66,12 +66,13 @@ def parse_player(pid: int, payload: dict) -> tuple[list[dict], list[dict]]:
         season_title = season.get("ti")
         season_id = season.get("sid")
 
-        # pt kann einzeln fehlen; letzten bekannten Wert fortschreiben.
-        last_team = None
+        # pt roh uebernehmen, ohne Fortschreibung: die Wahrheit entsteht
+        # zentral in derive_teams(), gegen die Paarung des Spiels geprueft.
+        # Die frueher hier praktizierte last_team-Fortschreibung hat falsche
+        # Werte ueber Folgezeilen geschmiert - pt ist je Spieltag gemeint
+        # und wechselt bei Transfers nachweislich korrekt mit.
         for entry in season.get("ph", []) or []:
-            team = str(entry.get("pt") or "") or last_team
-            if team:
-                last_team = team
+            team = str(entry.get("pt") or "") or None
             t1 = str(entry.get("t1") or "")
             t2 = str(entry.get("t2") or "")
             if not (t1 and t2):
@@ -82,7 +83,6 @@ def parse_player(pid: int, payload: dict) -> tuple[list[dict], list[dict]]:
             elif team == t2:
                 opponent, home = t1, False
             else:
-                # Team des Spielers passt zu keinem der beiden - Datenluecke.
                 opponent, home = None, None
 
             # p fehlt komplett (nicht null), wenn der Spieler nicht gespielt hat.
@@ -182,7 +182,14 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--delay", type=float, default=0.35)
     ap.add_argument("--limit", type=int, default=0, help="nur N Spieler (zum Testen)")
+    ap.add_argument("--consolidate", action="store_true",
+                    help="nur Teildateien zusammenfuehren und Teams herleiten - "
+                         "offline, ohne Login")
     args = ap.parse_args()
+
+    if args.consolidate:
+        consolidate()
+        return
 
     if not PLAYER_INDEX.exists():
         raise SystemExit(f"{PLAYER_INDEX} fehlt - erst 'python -m src.ingest.enumerate_ids' laufen lassen")
@@ -281,6 +288,116 @@ def main() -> None:
     consolidate()
 
 
+def derive_teams(panel: pd.DataFrame, matches: pd.DataFrame) -> pd.DataFrame:
+    """team_id/opponent_id/home je Zeile aus dem Spielplan herleiten.
+
+    Kickbase' ``pt`` ist meist richtig, aber nicht immer: 505 Zeilen
+    abgeschlossener Saisons trugen ein Team, das an dem Spiel gar nicht
+    beteiligt war (gehaeuft 2021/22 Liga 2), und die vor Saisonstart
+    gecrawlte laufende Saison hatte gar keins. Der Spielplan kann beides
+    reparieren, weil jede Zeile ihre ``match_id`` traegt und
+    ``matches.parquet`` (aus ``t1``/``t2`` gebaut, von ``pt`` unabhaengig)
+    alle Panel-Spiele abdeckt.
+
+    Regeln in dieser Reihenfolge, jede an den Bestandsdaten vermessen:
+
+    1. ``pt`` liegt in der Paarung -> glauben. Deckt ligainterne Wechsel je
+       Zeile ab; dort wechselt ``pt`` nachweislich korrekt mit.
+    2. Von den ueber Regel 1 etablierten Teams der Gruppe (Spieler, Saison,
+       Liga) liegt genau eines in der Paarung -> dieses. Faengt die
+       Randzeilen ligainterner Wechsler.
+    3. Haeufigkeit: das Team der Paarung, das in den Paarungen der Gruppe
+       mindestens doppelt so oft vorkommt wie das andere (und mindestens
+       zweimal) -> dieses. Ein strenger Gruppen*schnitt* stand hier zuerst
+       und fiel durch: bei Froede (1666, 21/22) machte eine einzige korrupte
+       Zeile (Paarung zweier fremder Teams) den Schnitt leer und liess alle
+       27 Zeilen unaufgeloest, obwohl 26 davon Rostock enthielten. Der
+       2x-Abstand schuetzt zugleich den Winterwechsler: im direkten Duell
+       seiner beiden Klubs liegen deren Haeufigkeiten nah beieinander, und
+       die Zeile bleibt ehrlich offen, statt geraten zu werden.
+    4. Einzelpaarung (alle Spiele der Gruppe gegen denselben Gegner, z. B.
+       Maloney 21/22: Hin- und Rueckspiel gegen den BVB): haeufigstes
+       ``pt`` der Gruppe liegt in der Paarung -> glauben.
+    5. Sonst bleibt die Zeile ohne Team - ehrlich leer statt falsch.
+    """
+    pair: dict[str, tuple[str, str]] = {
+        str(m): (str(a), str(b))
+        for m, a, b in zip(matches["match_id"], matches["home_team"], matches["away_team"])
+    }
+
+    roh = [None if pd.isna(t) else str(t) for t in panel["team_id"]]
+    mids = [str(m) for m in panel["match_id"]]
+    keys = list(zip(panel["player_id"], panel["season"], panel["league"]))
+
+    # Gruppenwissen in einem Vorlauf: etablierte Teams, Team-Haeufigkeit
+    # ueber alle Paarungen, haeufigstes rohes pt.
+    etabliert: dict[tuple, set] = {}
+    team_zaehler: dict[tuple, dict[str, int]] = {}
+    pt_zaehler: dict[tuple, dict[str, int]] = {}
+    for key, mid, pt in zip(keys, mids, roh):
+        p = pair.get(mid)
+        if p is None:
+            continue
+        z = team_zaehler.setdefault(key, {})
+        for t in p:
+            z[t] = z.get(t, 0) + 1
+        if pt in p:
+            etabliert.setdefault(key, set()).add(pt)
+        if pt:
+            z = pt_zaehler.setdefault(key, {})
+            z[pt] = z.get(pt, 0) + 1
+
+    team_neu: list[str | None] = []
+    stats = {"pt": 0, "etabliert": 0, "haeufigkeit": 0, "stich": 0, "offen": 0, "ohne_spiel": 0}
+    for key, mid, pt in zip(keys, mids, roh):
+        p = pair.get(mid)
+        if p is None:
+            team_neu.append(pt)
+            stats["ohne_spiel"] += 1
+            continue
+        if pt in p:
+            team_neu.append(pt)
+            stats["pt"] += 1
+            continue
+        e = etabliert.get(key, set()) & set(p)
+        if len(e) == 1:
+            team_neu.append(next(iter(e)))
+            stats["etabliert"] += 1
+            continue
+        z = team_zaehler[key]
+        a, b = sorted(p, key=lambda t: z.get(t, 0), reverse=True)
+        if z.get(a, 0) >= 2 and z.get(a, 0) >= 2 * z.get(b, 0):
+            team_neu.append(a)
+            stats["haeufigkeit"] += 1
+            continue
+        zp = pt_zaehler.get(key)
+        haeufigst = max(zp, key=zp.get) if zp else None
+        if haeufigst in p:
+            team_neu.append(haeufigst)
+            stats["stich"] += 1
+            continue
+        team_neu.append(None)
+        stats["offen"] += 1
+
+    panel = panel.copy()
+    panel["team_id"] = team_neu
+    panel["opponent_id"] = [
+        None if t is None or pair.get(m) is None
+        else (pair[m][1] if t == pair[m][0] else pair[m][0])
+        for t, m in zip(team_neu, mids)
+    ]
+    panel["home"] = [
+        None if t is None or pair.get(m) is None else t == pair[m][0]
+        for t, m in zip(team_neu, mids)
+    ]
+
+    print(f"[backfill] Teams hergeleitet: pt {stats['pt']:,}, "
+          f"etabliert {stats['etabliert']}, Haeufigkeit {stats['haeufigkeit']:,}, "
+          f"Stichentscheid {stats['stich']}, offen {stats['offen']}"
+          + (f", ohne Spielpaarung {stats['ohne_spiel']}" if stats["ohne_spiel"] else ""))
+    return panel
+
+
 def consolidate() -> None:
     """Teildateien zu panel.parquet und matches.parquet zusammenfuehren."""
     panel_parts = sorted(INTERIM.glob("panel_part_*.parquet"))
@@ -302,13 +419,24 @@ def consolidate() -> None:
              .drop_duplicates(subset=["player_id", "season", "league", "matchday"],
                               keep="last"))
     panel = panel.sort_values(["season", "league", "matchday", "player_id"]).reset_index(drop=True)
-    panel.to_parquet(PANEL, index=False)
+
+    # Schrumpft der Bestand, fehlen Teildateien - dann lieber gar nicht
+    # schreiben als still Zeilen verlieren.
+    if PANEL.exists():
+        bestand = len(pd.read_parquet(PANEL, columns=["player_id"]))
+        if len(panel) < bestand:
+            print(f"[backfill] ABBRUCH: Teildateien ergeben {len(panel):,} Zeilen, "
+                  f"Bestand hat {bestand:,} - interim/ unvollstaendig?")
+            return
 
     matches = pd.concat([pd.read_parquet(p) for p in match_parts], ignore_index=True)
     matches["match_date"] = pd.to_datetime(matches["match_date"], format="ISO8601", utc=True)
     # Jedes Spiel taucht einmal pro beteiligtem Spieler auf - auf match_id eindampfen.
     matches = matches.drop_duplicates(subset=["season", "league", "match_id"])
     matches = matches.sort_values(["season", "league", "matchday", "match_id"]).reset_index(drop=True)
+
+    panel = derive_teams(panel, matches)
+    panel.to_parquet(PANEL, index=False)
     matches.to_parquet(MATCHES, index=False)
 
     print(f"\n[backfill] {PANEL}")

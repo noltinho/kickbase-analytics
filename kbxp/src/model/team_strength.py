@@ -29,7 +29,7 @@ Ein Boosting-Stack ueber alle Reichweiten bringt nichts (rho 0,408 gegen 0,411
 linear, gleicher Testsplit) - der Zusammenhang ist additiv, und genau das
 schaetzt die Ridge direkt.
 
-Zwei Dinge sind seither dazugekommen, beide in modell-befunde.md ausgefuehrt:
+Zwei Dinge sind seither dazugekommen:
 
   · ``--backtest`` misst nur noch die Spieltage **vor der Winterpause** (dort ist
     in den Kickbase-Ligen Reset). Die Zahlen oben gelten fuer die ganze Saison;
