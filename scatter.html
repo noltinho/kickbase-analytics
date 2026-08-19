@@ -485,6 +485,7 @@
       <div class="btn-group">
         <button class="btn active" onclick="setX('avg')"   id="btn-avg">Ø Punkte</button>
         <button class="btn"        onclick="setX('total')" id="btn-total">Ø Bereinigt</button>
+        <button class="btn"        onclick="setX('avgm')"  id="btn-avgm" hidden>Prognose Ø</button>
       </div>
     </div>
     <div id="r2-badge"></div>
@@ -521,6 +522,8 @@ let teamFilter  = new Set();
 let teamPanelOpen = false;
 let searchQuery = '';
 let ALL_PLAYERS = [];
+/* Die bedingte Prognose des fallweisen Modells ist optional. Fehlt die Datei,
+   bleibt die Seite genau wie zuvor. */
 
 // ─── Statistik-Hilfsfunktionen ─────────────────────────────
 
@@ -552,12 +555,46 @@ function stdDev(arr) {
 }
 
 // ─── Filter ────────────────────────────────────────────────
+const X_TITEL = {
+  avg:   'Ø PUNKTE JE EINSATZ',
+  total: 'Ø BEREINIGT JE EINSATZ',
+  avgm:  'PROGNOSE Ø: Ø PUNKTE JE EINSATZ, GESUND UND GESETZT',
+};
+
+/* "Prognose Ø" ist das fallweise Modell (kbxp: python -m src.model.player_avg)
+   und kennt keine Rollenwahrscheinlichkeit: es rechnet für alle Spieler der
+   Kategorien 1–2 unter der Annahme "gesund, spielt seine Rolle". */
+const istAvgM = () => xMode === 'avgm';
+const xVal  = p => xMode === 'avgm'  ? (p.projA ? p.projA.xp : 0)
+                 : xMode === 'total' ? p.cleaned_avg_pts
+                 :                     p.avg_pts;
+/* Im "Prognose Ø"-Modus gibt es keine erwartete Einsatzzahl — die Annahme ist
+   ja "spielt". Ein fester Wert hält den Einsatz-Filter offen und macht die
+   Regression ungewichtet, was hier richtig ist: alle Prognosen stehen auf
+   derselben Datenlage. */
+const AVGM_APPS = 34;
+const appsOf = p => istAvgM() ? (p.projA ? AVGM_APPS : 0)
+                  :             p.appearances;
+
+/* Punktgröße = Verlässlichkeit: groß = sicher, klein = wackelig. Das Risiko
+   darf die Prognose nicht verschieben, deshalb Größe statt Position. */
+const punktGroesse = p => istAvgM() && p.projA ? 4 + 11 * p.projA.sicherheit
+                        :                        7;
+
+/* Verletzte fließen nicht in die Fair-Value-Linie ein: ihr Marktwert ist
+   ausfallbedingt gedrückt, und das Modell nennt bewusst den Ertrag *nach* der
+   Rückkehr. Sie bleiben sichtbar (eigenes Symbol), zählen aber nicht mit.
+   Die zweistufige Ausreißerbereinigung unten versuchte das bisher zu erraten
+   ("hohe Punkte, niedriger MV") — hier steht es als Tatsache. */
+const istVerletzt = p => !!(p.projA && p.projA.verletzt);
+
 function getFiltered() {
   return ALL_PLAYERS.filter(p =>
     posFilter.has(p.position) &&
     p.mv >= mvMin &&
     p.mv <= mvMax &&
-    p.appearances >= minApps &&
+    appsOf(p) >= minApps &&
+    (!istAvgM() || p.projA) &&
     teamFilter.has(p.team)
   );
 }
@@ -571,6 +608,15 @@ function fmtDev(n) {
   const sign = n >= 0 ? '+' : '';
   return sign + (n / 1e6).toFixed(2).replace('.', ',') + ' Mio';
 }
+
+/* Der Fall sagt, worauf die Zahl steht — und damit, wie fest sie ist:
+   a stützt sich auf den eigenen Punkteschnitt, b und c auf Verein, Marktwert
+   und Mannschaftsteil. */
+const FALL_LABEL = {
+  a: 'aus eigener Historie',
+  b: 'neue Rolle, wenig Historie',
+  c: 'neu in der Liga',
+};
 
 // ─── Datenverarbeitung ─────────────────────────────────────
 function processPlayers(raw, competition) {
@@ -603,6 +649,7 @@ function processPlayers(raw, competition) {
 
       const mv_obj = p.market_value;
       return {
+        id: String(p.id),
         name: p.name, team: p.team_name,
         position: POSITION_LABEL[p.position] || '?',
         mv: mv_obj.current,
@@ -613,9 +660,7 @@ function processPlayers(raw, competition) {
 }
 
 // ─── Traces ────────────────────────────────────────────────
-function buildTraces(players, combined, regAvg, regCleaned) {
-  const activeReg = xMode === 'total' ? regCleaned : regAvg;
-  const xVal = p => xMode === 'total' ? p.cleaned_avg_pts : p.avg_pts;
+function buildTraces(players, combined, activeReg) {
   const xs = players.map(xVal);
 
   // Spieler-Traces: gruppiert nach Liga, Farbe = combined score
@@ -632,20 +677,39 @@ function buildTraces(players, combined, regAvg, regCleaned) {
     y: items.map(({ p }) => p.mv),
     text: items.map(({ p, i }) => {
       const c = combined[i];
-      const modellwert = activeReg.yHat[i];
-      const delta = modellwert - p.mv;
-      const label = c < -1.0 ? '<span style="color:#25dc84">Unterbewertet</span>'
+      // Unter drei Punkten gibt es keine Regression — im Prognose-Modus mit
+      // engem Team- oder Positionsfilter ist das kein Ausnahmefall mehr.
+      const modellwert = activeReg ? activeReg.yHat[i] : null;
+      const delta = modellwert === null ? 0 : modellwert - p.mv;
+      const label = !activeReg ? ''
+                  : c < -1.0 ? '<span style="color:#25dc84">Unterbewertet</span>'
                   : c < -0.5 ? '<span style="color:#7acca0">Leicht unterbewertet</span>'
                   : c >  1.0 ? '<span style="color:#ff4600">Überbewertet</span>'
                   : c >  0.5 ? '<span style="color:#cc8060">Leicht überbewertet</span>'
                   :             '<span style="color:#7e8187">Fair bewertet</span>';
+      const punkte = istAvgM()
+        ? `<span style="color:#7e8187">Prognose Ø</span>  ${p.projA.xp} Ø Pkt` +
+          `  <span style="color:#7e8187">±</span>  ${p.projA.streuung}<br>` +
+          `<span style="color:#7e8187">${p.projA.pos} · ${FALL_LABEL[p.projA.fall] || p.projA.fall}</span>` +
+          (p.projA.hist === null ? ''
+            : `  <span style="color:#7e8187">bisher</span>  ${p.projA.hist}`) + `<br>` +
+          `<span style="color:#7e8187">Teamstärke</span>  ${p.projA.z_hat}` +
+          (p.projA.mw_verhaeltnis == null ? ''
+            : `<br><span style="color:#7e8187">MW / Vorgänger</span>  ${p.projA.mw_verhaeltnis}` +
+              `  <span style="color:#7e8187">Alter Δ</span>  ${p.projA.alter_delta}`) +
+          (p.projA.verletzt
+            ? `  <span style="color:#ff4600">derzeit verletzt — außerhalb der Regression</span>` : '') +
+          `<br>`
+        : `<span style="color:#7e8187">Ø Punkte</span>  ${p.avg_pts} Pkt<br>` +
+          `<span style="color:#7e8187">Ø Bereinigt</span>  ${p.cleaned_avg_pts} Pkt<br>`;
       return `<b style="color:#dee4ec">${p.name}</b>  <span style="color:#7e8187">${p.team}</span><br>` +
         `<span style="color:#7e8187">Position</span>  ${p.position}` +
-        `  <span style="color:#7e8187">Einsätze</span>  ${p.appearances}<br>` +
+        (istAvgM() ? '<br>'
+          : `  <span style="color:#7e8187">Einsätze</span>  ${p.appearances}<br>`) +
         `<span style="color:#7e8187">Marktwert</span>  ${fmt(p.mv)} ${p.mv_trend}<br>` +
-        `<span style="color:#7e8187">Modellwert</span>  ${fmt(modellwert)}  <span style="color:${delta > 0 ? '#25dc84' : '#ff4600'}">${fmtDev(delta)}</span><br>` +
-        `<span style="color:#7e8187">Ø Punkte</span>  ${p.avg_pts} Pkt<br>` +
-        `<span style="color:#7e8187">Ø Bereinigt</span>  ${p.cleaned_avg_pts} Pkt<br>` +
+        (modellwert === null ? ''
+          : `<span style="color:#7e8187">Modellwert</span>  ${fmt(modellwert)}  <span style="color:${delta > 0 ? '#25dc84' : '#ff4600'}">${fmtDev(delta)}</span><br>`) +
+        punkte +
         label;
     }),
     hovertemplate: '%{text}<extra></extra>',
@@ -654,9 +718,12 @@ function buildTraces(players, combined, regAvg, regCleaned) {
       colorscale: [[0,'#25dc84'],[0.25,'#7acca0'],[0.5,'#7e8187'],[0.75,'#cc8060'],[1,'#ff4600']],
       cmin: -2, cmax: 2,
       showscale: false,
-      size: 7,
+      size: items.map(({ p }) => punktGroesse(p)),
       opacity: hasSearch ? 0.2 : 0.85,
-      symbol: SYMBOL[comp] || 'circle',
+      // Verletzte bekommen ein offenes Symbol: sie stehen im Bild, aber nicht
+      // in der Fair-Value-Linie, und das soll man sehen.
+      symbol: items.map(({ p }) => istVerletzt(p)
+        ? (SYMBOL[comp] || 'circle') + '-open' : (SYMBOL[comp] || 'circle')),
       line: { width: 0.5, color: '#131417' },
     },
   }));
@@ -668,7 +735,7 @@ function buildTraces(players, combined, regAvg, regCleaned) {
       const hitIdx = hits.map(p => players.indexOf(p));
       traces.push({
         type: 'scatter', mode: 'markers+text',
-        x: hits.map(p => xMode === 'total' ? p.cleaned_avg_pts : p.avg_pts),
+        x: hits.map(xVal),
         y: hits.map(p => p.mv),
         text: hits.map(p => p.name),
         textposition: 'top center',
@@ -708,7 +775,11 @@ const layout = {
   plot_bgcolor:  '#131417',
   font: { color: '#7e8187', size: 11, family: "'DM Mono', monospace" },
   xaxis: {
-    title: { text: '' },
+    /* Leer nur bis zum ersten render(), das den Titel aus X_TITEL setzt.
+       Er muss dastehen: alle drei Modi teilen die Skala "Ø Punkte je
+       Einsatz", unterscheiden sich aber in dem, was sie zählen — ohne
+       Beschriftung liest man die Prognose als erzielten Schnitt. */
+    title: { text: '', font: { size: 11, color: '#7e8187' }, standoff: 8 },
     gridcolor: '#2f363f', zerolinecolor: '#2f363f',
     tickfont: { size: 10 }, linecolor: '#2f363f',
   },
@@ -738,62 +809,68 @@ const config = {
 function render() {
   const players = getFiltered();
 
-  let regAvg = null, regCleaned = null;
+  let reg = null;
   let combined = players.map(() => 0);
 
   if (players.length >= 3) {
     const mvs     = players.map(p => p.mv);
-    const avgs    = players.map(p => p.avg_pts);
-    const cleaned = players.map(p => p.cleaned_avg_pts);
-    const weights = players.map(p => Math.sqrt(p.appearances));
+    const xs      = players.map(xVal);
+    const weights = players.map(p => Math.sqrt(appsOf(p)));
 
-    // Pass 1: Avg-Regression zum Finden negativer Ausreißer
-    const p1A = olsW(avgs, mvs, weights);
-    const r1A = players.map((_, i) => mvs[i] - p1A.yHat[i]);
-    const s1A = stdDev(r1A);
+    // Pass 1: Regression zum Finden negativer Ausreißer. Verletzte sind schon
+    // hier draußen — sonst verzieht ihr gedrückter Marktwert die Gerade, an
+    // der sie anschließend gemessen würden.
+    const gesund = players.map(p => !istVerletzt(p));
+    const gX = xs.filter((_, i) => gesund[i]);
+    const gM = mvs.filter((_, i) => gesund[i]);
+    const gW = weights.filter((_, i) => gesund[i]);
+    const p1 = olsW(gX.length >= 3 ? gX : xs, gX.length >= 3 ? gM : mvs,
+                    gX.length >= 3 ? gW : weights);
+    const r1 = players.map((_, i) => mvs[i] - (p1.slope * xs[i] + p1.intercept));
+    const s1 = stdDev(r1);
 
-    // Nur untere Ausreißer entfernen (hohe Avg-Punkte, niedriger MV = verletzt/transferiert)
+    // Nur untere Ausreißer entfernen (hohe Punkte, niedriger MV = transferiert)
     const THRESH = -2.0;
-    const keep = players.map((_, i) => r1A[i] / s1A >= THRESH);
-    const cA  = avgs.filter(   (_, i) => keep[i]);
-    const cC  = cleaned.filter((_, i) => keep[i]);
+    const keep = players.map((_, i) => gesund[i] && r1[i] / s1 >= THRESH);
+    const cX  = xs.filter(     (_, i) => keep[i]);
     const cM  = mvs.filter(    (_, i) => keep[i]);
     const cW  = weights.filter((_, i) => keep[i]);
 
-    // Pass 2: saubere Regression auf bereinigtem Datensatz
-    const fitA = olsW(cA, cM, cW);
-    const fitC = olsW(cC, cM, cW);
+    // Pass 2: saubere Regression auf bereinigtem Datensatz. Bleiben nach dem
+    // Herausnehmen der Verletzten und Ausreißer zu wenige übrig, gilt der
+    // erste Durchgang — eine Gerade auf zwei Punkten wäre schlimmer als eine
+    // ungenaue.
+    const fit = cX.length >= 3 ? olsW(cX, cM, cW) : p1;
 
     // Auf ALLE Spieler anwenden (Ausreißer bleiben im Chart sichtbar)
-    const yHatA = avgs.map(   x => fitA.slope * x + fitA.intercept);
-    const yHatC = cleaned.map(x => fitC.slope * x + fitC.intercept);
+    const yHat = xs.map(x => fit.slope * x + fit.intercept);
+    reg = { slope: fit.slope, intercept: fit.intercept, yHat,
+            r2: computeR2(cM.length >= 3 ? cM : mvs,
+                          (cM.length >= 3 ? cX : xs).map(x => fit.slope * x + fit.intercept)) };
 
-    regAvg     = { slope: fitA.slope, intercept: fitA.intercept, yHat: yHatA, r2: computeR2(cM, fitA.yHat) };
-    regCleaned = { slope: fitC.slope, intercept: fitC.intercept, yHat: yHatC, r2: computeR2(cM, fitC.yHat) };
+    const res      = players.map((_, i) => mvs[i] - yHat[i]);
+    const sdActive = stdDev(res);
+    combined = players.map((_, i) => res[i] / sdActive);
 
-    // Farbe & Score nach aktiver X-Achse
-    const activeYHat = xMode === 'total' ? yHatC : yHatA;
-    const activeRes  = players.map((_, i) => mvs[i] - activeYHat[i]);
-    const sdActive   = stdDev(activeRes);
-    combined = players.map((_, i) => activeRes[i] / sdActive);
-
-    document.getElementById('r2-badge').textContent =
-      `R² ${(xMode === 'total' ? regCleaned : regAvg).r2.toFixed(3)}`;
+    document.getElementById('r2-badge').textContent = `R² ${reg.r2.toFixed(3)}`;
   } else {
     document.getElementById('r2-badge').textContent = '';
   }
 
-  const activeReg = xMode === 'total' ? regCleaned : regAvg;
-  updateSearchPanel(players, combined, activeReg);
-  Plotly.react('chart', buildTraces(players, combined, regAvg, regCleaned), layout, config);
+  layout.xaxis.title.text = X_TITEL[xMode];
+  updateSearchPanel(players, combined, reg);
+  Plotly.react('chart', buildTraces(players, combined, reg), layout, config);
 }
 
 // ─── Event-Handler ─────────────────────────────────────────
 function setX(mode) {
   xMode = mode;
-  document.getElementById('btn-total').classList.toggle('active', mode === 'total');
-  document.getElementById('btn-avg').classList.toggle('active', mode === 'avg');
-  render();
+  for (const [id, m] of [['btn-avg', 'avg'], ['btn-total', 'total'],
+                         ['btn-avgm', 'avgm']])
+    document.getElementById(id).classList.toggle('active', mode === m);
+  // "Prognose Ø" kennt keine Einsatzzahl, der Filter darf dort nichts wegnehmen.
+  document.getElementById('min-apps').value = istAvgM() ? 0 : 6;
+  setApps();
 }
 
 function togglePos(pos) {
@@ -826,9 +903,9 @@ function setSearch() {
   render();
 }
 
-function updateSearchPanel(players, combined, regAvg) {
+function updateSearchPanel(players, combined, reg) {
   const panel = document.getElementById('search-panel');
-  if (searchQuery.length < 2) { panel.innerHTML = ''; return; }
+  if (searchQuery.length < 2 || !reg) { panel.innerHTML = ''; return; }
 
   const hits = players.map((p, i) => ({ p, i }))
     .filter(({ p }) => p.name.toLowerCase().includes(searchQuery));
@@ -836,7 +913,7 @@ function updateSearchPanel(players, combined, regAvg) {
   if (!hits.length) { panel.innerHTML = '<div class="search-card"><div class="search-card-team">Keine Treffer</div></div>'; return; }
 
   panel.innerHTML = hits.map(({ p, i }) => {
-    const modellwert = regAvg.yHat[i];
+    const modellwert = reg.yHat[i];
     const delta      = modellwert - p.mv;
     const c          = combined[i];
     const labelText  = c < -1.0 ? 'Unterbewertet'
@@ -847,14 +924,21 @@ function updateSearchPanel(players, combined, regAvg) {
     const labelColor = c < -1.0 ? '#25dc84' : c < -0.5 ? '#7acca0'
                      : c >  1.0 ? '#ff4600' : c >  0.5 ? '#cc8060' : '#7e8187';
     const deltaColor = delta > 0 ? '#25dc84' : '#ff4600';
+    const punkte = istAvgM()
+      ? `<div class="search-card-row"><span>Prognose Ø · ±</span><span>${p.projA.xp} · ${p.projA.streuung}</span></div>
+         <div class="search-card-row"><span>Position · Fall</span><span>${p.projA.pos} · ${FALL_LABEL[p.projA.fall] || p.projA.fall}</span></div>
+         <div class="search-card-row"><span>bisher · Teamstärke</span><span>${p.projA.hist ?? '–'} · ${p.projA.z_hat}</span></div>
+         ${p.projA.mw_verhaeltnis == null ? '' : `<div class="search-card-row"><span>MW/Vorgänger · Alter Δ</span><span>${p.projA.mw_verhaeltnis} · ${p.projA.alter_delta}</span></div>`}
+         ${p.projA.verletzt ? '<div class="search-card-row"><span>Status</span><span style="color:#ff4600">verletzt</span></div>' : ''}`
+      : `<div class="search-card-row"><span>Ø Punkte</span><span>${p.avg_pts}</span></div>
+         <div class="search-card-row"><span>Ø Bereinigt</span><span>${p.cleaned_avg_pts}</span></div>`;
     return `<div class="search-card">
       <div class="search-card-name">${p.name}</div>
       <div class="search-card-team">${p.team} · ${p.position}</div>
-      <div class="search-card-row"><span>Einsätze</span><span>${p.appearances}</span></div>
+      ${istAvgM() ? '' : `<div class="search-card-row"><span>Einsätze</span><span>${p.appearances}</span></div>`}
       <div class="search-card-row"><span>Marktwert</span><span>${fmt(p.mv)} ${p.mv_trend}</span></div>
       <div class="search-card-row"><span>Modellwert</span><span>${fmt(modellwert)} <span style="color:${deltaColor}">${fmtDev(delta)}</span></span></div>
-      <div class="search-card-row"><span>Ø Punkte</span><span>${p.avg_pts}</span></div>
-      <div class="search-card-row"><span>Ø Bereinigt</span><span>${p.cleaned_avg_pts}</span></div>
+      ${punkte}
       <div class="search-card-label" style="color:${labelColor}">${labelText}</div>
     </div>`;
   }).join('');
@@ -930,6 +1014,41 @@ function updateTeamTrigger() {
   }
 }
 
+/* Prognose nachladen — bewusst nach dem ersten render(): fehlt die Datei
+   oder passt sie nicht zur gewählten Saison/Liga, bleibt die Seite unverändert
+   und der zugehörige Knopf einfach aus. */
+function attachProjections() {
+  if (liga !== '1' || (season && season !== SEASONS.current)) return;
+  return ladeAvgModell().then(() => {
+    /* Vor dem ersten Spieltag trägt data_1.json zwar alle 34 Spieltage, aber
+       überall 0 Punkte und "0'" Minuten — jeder Spieler landet bei 0 Einsätzen
+       und fällt durch den Einsatz-Filter. Die Ø-Achse ist dann leer, und Plotly
+       zeichnet mangels Punkten seinen Standardbereich 0–1. Also auf eine
+       gefüllte Achse umschalten.
+
+       Das fallweise Modell ist auf gesetzten Spielern gelernt und für sie geeicht (walk-forward
+       MAE 16,6), deckt dafür nur die Kategorien 1–2 ab. */
+    if (xMode !== 'avg' || ALL_PLAYERS.some(p => p.appearances > 0)) return;
+    if (ALL_PLAYERS.some(p => p.projA)) setX('avgm');
+  });
+}
+
+/* Das fallweise Modell ist die bedingte Produktionsprognose für Kategorie 1–2. */
+function ladeAvgModell() {
+  return fetch('data/player_projections_avg.json')
+    .then(r => r.ok ? r.json() : null)
+    .then(doc => {
+      if (!doc || !doc.players) return;
+      let treffer = 0;
+      ALL_PLAYERS.forEach(p => {
+        const e = doc.players[p.id];
+        if (e) { p.projA = e; treffer++; }
+      });
+      if (treffer) document.getElementById('btn-avgm').hidden = false;
+    })
+    .catch(() => {});
+}
+
 // ─── Daten laden ───────────────────────────────────────────
 fetch('data/seasons.json')
   .then(r => r.json())
@@ -943,6 +1062,7 @@ fetch('data/seasons.json')
     buildTeamButtons();
     buildCleanedList();
     render();
+    return attachProjections();
   }).catch(err => {
     document.getElementById('chart').innerHTML =
       `<p class="error">Fehler beim Laden der Daten: ${err.message}</p>`;

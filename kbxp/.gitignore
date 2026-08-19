@@ -1,8 +1,6 @@
 # Zwischenstaende des Crawls/Backfills - jederzeit reproduzierbar
 data/raw/
 data/interim/
-output/
-reports/figures/
 
 # data/processed/ wird bewusst NICHT ignoriert. Ohne panel.parquet
 # ueberspringt tests/test_panel_matches_archive.py beide Tests und meldet

@@ -8,7 +8,7 @@ vollstaendig auf **einer** Seite je Verein::
     /<slug>/kader/verein/<id>/saison_id/<jahr>/plus/1
 
 Eine Zeile dort traegt TM-ID, Name, feine Position, Geburtsdatum, Groesse,
-Fuss, Vorverein samt Abloese, Vertragsende und Marktwert. Damit kostet ein
+Fuss und Geburtsdatum. Damit kostet ein
 kompletter Lauf **36 Requests** (18 + 18 Vereine) statt eines Profilaufrufs
 je Spieler. Der Aufwand liegt nicht im Holen, sondern im Zuordnen.
 
@@ -44,6 +44,7 @@ Aufruf (aus kbxp/)::
     python -m src.ingest.transfermarkt                     # laufende Saison
     python -m src.ingest.transfermarkt --von 2013 --bis 2026   # alles, ~380 Requests
     python -m src.ingest.transfermarkt --nur-zuordnen      # player_id neu, ohne Netz
+    python -m src.ingest.transfermarkt --nur-marktwerte    # Stichtagswerte neu, ohne Netz
     python -m src.ingest.transfermarkt --vergleich         # Abgleich, kein Netz
 """
 
@@ -57,6 +58,7 @@ import re
 import time
 import unicodedata
 from collections import Counter
+from datetime import date, datetime
 
 import requests
 
@@ -69,6 +71,19 @@ ZIEL = MANUAL / "tm_players.csv"
 # ist (raw/ ist ignoriert) und weil er nach *jedem* Abruf waechst - siehe
 # profile_nachholen.
 VOLLNAMEN = RAW / "tm_vollnamen.jsonl"
+
+# Roher Marktwertverlauf je Spieler. Wie VOLLNAMEN ein Zwischenspeicher in
+# raw/ (ignoriert, reproduzierbar): in ZIEL landet nur der abgeleitete Wert
+# je Saison. Der volle Verlauf bleibt hier, damit ein feineres Merkmal
+# (Trend der letzten Monate) spaeter keinen zweiten Crawl kostet.
+MARKTWERTE = RAW / "tm_marktwerte.jsonl"
+
+# Stichtag: Marktwert *vor* der Saison. Der Wert, den die Kaderseite nennt,
+# trifft eher das Saisonende - Naldo steht dort fuer 2016/17 bei 1,5 Mio,
+# sein datierter Stand zum 1. August 2016 war 3,0 Mio. Ihn als Merkmal
+# derselben Saison zu benutzen waere Leakage, deshalb wird er gar nicht
+# erst gelesen.
+STICHTAG = (8, 1)
 
 BASIS = "https://www.transfermarkt.de"
 
@@ -116,8 +131,14 @@ POSITION = {
 
 SPALTEN = [
     "player_id", "tm_id", "season", "liga", "verein", "spieler",
-    "position_tm", "position_fine", "geburtsdatum", "vertrag_bis",
-    "marktwert_eur", "zuvor", "vollname",
+    "position_tm", "position_fine", "geburtsdatum", "vollname",
+    # Marktwert zum 1. August der Saison, aus dem datierten Verlauf. Der Wert
+    # der Kaderseite stand hier frueher daneben, trifft aber eher das
+    # Saisonende und waere als Merkmal derselben Saison Leakage - er ist
+    # ersatzlos raus, weil sich aus tm_marktwerte.jsonl ohnehin jeder
+    # Stichtag ableiten laesst. Das Datum bleibt: ein Jahre alter Stand ist
+    # anders zu lesen als ein frischer.
+    "mw_vor_saison", "mw_vor_saison_dt",
 ]
 
 
@@ -169,17 +190,6 @@ def text_von(fragment: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(ohne_tags)).strip()
 
 
-def marktwert_zu_euro(text: str) -> int | None:
-    """'6,00 Mio. €' -> 6000000, '800 Tsd. €' -> 800000, '-' -> None."""
-    treffer = re.search(r"([\d.,]+)\s*(Mio|Tsd)?", text)
-    if not treffer:
-        return None
-    try:
-        zahl = float(treffer.group(1).replace(".", "").replace(",", "."))
-    except ValueError:
-        return None
-    faktor = {"Mio": 1_000_000, "Tsd": 1_000}.get(treffer.group(2) or "", 1)
-    return int(round(zahl * faktor))
 
 
 # --------------------------------------------------------------------------
@@ -214,8 +224,8 @@ class Sitzung:
         self.versuche = versuche
         self.gebremst = 0
 
-    def holen(self, pfad: str) -> str | None:
-        """Seitentext, oder None wenn sie auch nach allen Versuchen nicht kommt."""
+    def holen(self, pfad: str, als_json: bool = False):
+        """Seitentext (oder geparstes JSON), None wenn nichts ankommt."""
         for versuch in range(self.versuche):
             time.sleep(self.delay)
             basis = 5
@@ -225,7 +235,13 @@ class Sitzung:
                 grund: object = e
             else:
                 if antwort.status_code == 200:
-                    return antwort.text
+                    if not als_json:
+                        return antwort.text
+                    try:
+                        return antwort.json()
+                    except ValueError:
+                        print(f"    ! kein JSON: {pfad}")
+                        return None
                 if antwort.status_code not in self.NOCHMAL:
                     print(f"    ! HTTP {antwort.status_code} fuer {pfad}")
                     return None
@@ -270,6 +286,51 @@ def profil_vollname(sitzung: Sitzung, tm_id: str) -> str | None:
         return None
     treffer = _VOLLNAME.search(seite)
     return text_von(treffer.group(1)) if treffer else ""
+
+
+def marktwert_verlauf(sitzung: Sitzung, tm_id: str) -> list[dict] | None:
+    """Datierter Marktwertverlauf eines Spielers, oder None wenn nichts kam.
+
+    Nicht die HTML-Seite ``/marktwertverlauf/...`` (91 KB, Werte stecken nur
+    im Diagramm), sondern die Datenquelle dahinter: ``/ceapi/...`` liefert
+    dieselben Punkte als JSON in 5 KB. Je Punkt Datum, Wert und **Verein** -
+    letzterer deckt auch die Zeit ab, in der ein Spieler gar nicht in BL1/BL2
+    stand, und schliesst damit die Luecke bei Aufsteigern und
+    Auslandszugaengen.
+
+    Rueckgabe leer (``[]``), wenn der Spieler keinen Verlauf hat - das wird
+    im Zwischenspeicher festgehalten, damit er nicht erneut geholt wird.
+    """
+    roh = sitzung.holen(f"/ceapi/marketValueDevelopment/graph/{tm_id}", als_json=True)
+    if roh is None:
+        return None
+    punkte = []
+    for p in (roh.get("list") or []):
+        datum, wert = p.get("datum_mw"), p.get("y")
+        if not datum or wert is None:
+            continue
+        try:
+            tag = datetime.strptime(datum, "%d.%m.%Y").date()
+        except ValueError:
+            continue
+        punkte.append({"dt": tag.isoformat(), "mw": int(wert),
+                       "verein": p.get("verein") or ""})
+    punkte.sort(key=lambda p: p["dt"])
+    return punkte
+
+
+def wert_zum_stichtag(punkte: list[dict], jahr: int) -> tuple[int, str] | None:
+    """Letzter bekannter Marktwert am 1. August des Saisonjahres.
+
+    Nicht der naechstgelegene, sondern der letzte **davor** - alles andere
+    waere Wissen aus der Saison, die vorhergesagt werden soll. Zurueck kommt
+    auch das Datum des benutzten Punktes: liegt es Jahre zurueck (Spieler
+    lange verletzt oder ausser Sicht), ist das Merkmal schal, und das soll
+    das Modell sehen koennen.
+    """
+    grenze = date(jahr, *STICHTAG).isoformat()
+    davor = [p for p in punkte if p["dt"] <= grenze]
+    return (davor[-1]["mw"], davor[-1]["dt"]) if davor else None
 
 
 def vereine_der_liga(sitzung: Sitzung, wettbewerb: str, saison: int) -> list[tuple[str, str]]:
@@ -356,13 +417,15 @@ def kader_zerlegen(seite: str) -> list[dict]:
 
         # Ohne die innere Tabelle stehen die aeusseren Zellen in fester
         # Ordnung: Nummer, (leer), Geb./Alter, Nat., Groesse, Fuss,
-        # im Team seit, Zuvor, Vertrag, Marktwert.
+        # im Team seit, Zuvor, Vertrag, Marktwert. Gelesen wird davon nur das
+        # Geburtsdatum - Vertragsende und Vorverein fuellt Transfermarkt auf
+        # historischen Kaderseiten ohnehin nicht (nur 1.055 von 12.361
+        # Zeilen), und fuers Modell tragen sie nichts bei. Die Laengenpruefung
+        # bleibt trotzdem: sie trennt echte Kaderzeilen von allem anderen.
         rest = _INLINE.sub("", zeile)
         zellen = _ZELLE.findall(rest)
         if len(zellen) < 10:
             continue
-
-        vorverein = re.search(r'title="([^":]+)', zellen[7])
 
         spieler.append({
             "tm_id": tm_id,
@@ -370,11 +433,10 @@ def kader_zerlegen(seite: str) -> list[dict]:
             "position_tm": position_tm,
             "position_fine": POSITION.get(entumlauten(position_tm), ""),
             "geburtsdatum": text_von(zellen[2]).split(" ")[0],
-            "vertrag_bis": text_von(zellen[8]),
-            "marktwert_eur": marktwert_zu_euro(text_von(zellen[9])),
-            "zuvor": html.unescape(vorverein.group(1)).strip() if vorverein else "",
-            # Bleibt leer, bis --profile das Spielerprofil holt.
+            # Bleiben leer, bis --profile bzw. --marktwerte sie fuellen.
             "vollname": "",
+            "mw_vor_saison": "",
+            "mw_vor_saison_dt": "",
         })
     return spieler
 
@@ -709,12 +771,31 @@ def alte_bruecke(season: str) -> dict[str, str]:
 
 
 def schreiben(zeilen: list[dict], season: str) -> None:
-    """Die Saison ersetzen, alle anderen unveraendert stehen lassen."""
+    """Die Saison ersetzen, alle anderen unveraendert stehen lassen.
+
+    Mit einer Ausnahme: Saisonzeilen, deren ``tm_id`` im neuen Bestand fehlt,
+    bleiben stehen. Die Kaderseite fuehrt nur den Profikader - Spieler, die
+    Kickbase kennt, TM aber in der U19 oder Zweitvertretung listet, kommen
+    per Hand in die Datei (Aleksa Damjanovic, Tim Binder u. a.) und wuerden
+    sonst bei jedem Lauf wieder verschwinden. Dasselbe gilt fuer Abgaenge
+    waehrend des Transferfensters: die Saison hat sie gehabt, die Kaderseite
+    zeigt sie nicht mehr. Taucht eine ``tm_id`` spaeter doch im Crawl auf,
+    gewinnt der Crawl - die erhaltene Zeile ist nur Platzhalter, nie Vorrang.
+    """
     andere = []
+    behalten = []
+    neu = {z["tm_id"] for z in zeilen}
     if ZIEL.exists():
         with open(ZIEL, encoding="utf-8", newline="") as f:
-            andere = [r for r in csv.DictReader(f) if r.get("season") != season]
-    alle = andere + zeilen
+            for r in csv.DictReader(f):
+                if r.get("season") != season:
+                    andere.append(r)
+                elif r.get("tm_id") and r["tm_id"] not in neu:
+                    behalten.append(r)
+    if behalten:
+        print(f"  {len(behalten)} Zeilen ohne Kadereintrag erhalten "
+              f"(handgelegt oder Abgang)")
+    alle = andere + behalten + zeilen
     alle.sort(key=lambda r: (r["season"], r["verein"], r["spieler"]))
     with open(ZIEL, "w", encoding="utf-8", newline="") as f:
         schreiber = csv.DictWriter(f, fieldnames=SPALTEN)
@@ -850,6 +931,130 @@ def profile_nachholen(sitzung: Sitzung, min_minuten: int) -> None:
         schreiber.writeheader()
         schreiber.writerows(alle)
     print(f"[tm] {geholt} Vollnamen neu geholt, {getroffen} Zeilen ergaenzt")
+
+
+def gelesene_marktwerte() -> dict[str, list[dict]]:
+    """{tm_id: Verlauf} aus frueheren Laeufen, leere Verlaeufe eingeschlossen."""
+    if not MARKTWERTE.exists():
+        return {}
+    bekannt: dict[str, list[dict]] = {}
+    with open(MARKTWERTE, encoding="utf-8") as f:
+        for zeile in f:
+            zeile = zeile.strip()
+            if zeile:
+                eintrag = json.loads(zeile)
+                bekannt[str(eintrag["tm_id"])] = eintrag.get("verlauf") or []
+    return bekannt
+
+
+def marktwerte_eintragen(alle: list[dict], bekannt: dict[str, list[dict]]) -> int:
+    """mw_vor_saison / mw_vor_saison_dt je Zeile setzen. Gibt Treffer zurueck."""
+    getroffen = 0
+    for z in alle:
+        verlauf = bekannt.get(z["tm_id"])
+        if not verlauf:
+            continue
+        treffer = wert_zum_stichtag(verlauf, int(z["season"][:4]))
+        if treffer:
+            z["mw_vor_saison"], z["mw_vor_saison_dt"] = str(treffer[0]), treffer[1]
+            getroffen += 1
+    return getroffen
+
+
+def marktwerte_holen(sitzung: Sitzung) -> None:
+    """Marktwertverlauf je Spieler holen und den Vorsaison-Wert ableiten.
+
+    Ein Abruf je **Spieler**, nicht je Spielersaison - der Verlauf deckt die
+    ganze Karriere ab. Der volle Verlauf bleibt im Zwischenspeicher, in die
+    Datei geht nur der Stand zum Stichtag.
+
+    Resumierbar wie der Profilabruf: jede Antwort sofort als JSONL-Zeile.
+    """
+    if not ZIEL.exists():
+        print("[tm] keine tm_players.csv")
+        return
+    with open(ZIEL, encoding="utf-8", newline="") as f:
+        alle = [{**{s: "" for s in SPALTEN}, **z} for z in csv.DictReader(f)]
+
+    bekannt = gelesene_marktwerte()
+    if bekannt:
+        print(f"[tm] {len(bekannt)} Verlaeufe aus frueheren Laeufen bekannt")
+
+    # Nur Spieler mit Kickbase-Bruecke - fuer die anderen gibt es nichts zu
+    # verbinden, und sie kosten sonst ein Drittel des Laufs.
+    offen = sorted({z["tm_id"] for z in alle
+                    if z["player_id"] and z["tm_id"] not in bekannt}, key=int)
+    print(f"[tm] {len(offen)} Verlaeufe zu holen")
+    print("[tm] resumierbar: Abbruch mit Strg+C ist unkritisch")
+
+    ensure_dirs()
+    punkte = 0
+    try:
+        with open(MARKTWERTE, "a", encoding="utf-8") as sink:
+            for nr, tm_id in enumerate(offen, 1):
+                verlauf = marktwert_verlauf(sitzung, tm_id)
+                if verlauf is None:      # Absage - nicht festhalten
+                    continue
+                sink.write(json.dumps({"tm_id": tm_id, "verlauf": verlauf},
+                                      ensure_ascii=False) + "\n")
+                sink.flush()
+                bekannt[tm_id] = verlauf
+                punkte += len(verlauf)
+                if nr % 200 == 0:
+                    print(f"  [{nr}/{len(offen)}] {punkte:,} Stuetzstellen")
+    except KeyboardInterrupt:
+        print("\n[tm] abgebrochen - Fortschritt ist gesichert")
+
+    getroffen = _marktwerte_schreiben(alle, bekannt)
+    print(f"[tm] {len(bekannt)} Verlaeufe, {punkte:,} neue Stuetzstellen -> "
+          f"{getroffen} von {len(alle)} Zeilen mit Vorsaison-Marktwert")
+
+
+def _marktwerte_schreiben(alle: list[dict], bekannt: dict[str, list[dict]]) -> int:
+    """Stichtagswerte eintragen und die Datei neu schreiben."""
+    getroffen = marktwerte_eintragen(alle, bekannt)
+    alle.sort(key=lambda r: (r["season"], r["verein"], r["spieler"]))
+    with open(ZIEL, "w", encoding="utf-8", newline="") as f:
+        schreiber = csv.DictWriter(f, fieldnames=SPALTEN)
+        schreiber.writeheader()
+        schreiber.writerows(alle)
+    return getroffen
+
+
+def marktwerte_offline() -> None:
+    """Stichtagswerte allein aus dem gespeicherten Verlauf neu eintragen.
+
+    Der volle Verlauf liegt in ``tm_marktwerte.jsonl`` und reicht bis zum Tag
+    des letzten Laufs - eine neue Saison braucht deshalb keinen neuen Crawl,
+    sondern nur einen neuen Stichtag. Genau wie ``--nur-zuordnen`` ist das die
+    netzfreie Wiederholung eines Ableitungsschritts: die Rohdaten aendern sich
+    nicht, nur was man aus ihnen liest.
+
+    Wo der Verlauf vor dem 1. August der Saison endet, bleibt die Zeile leer -
+    ein Spieler, den Transfermarkt zum Stichtag noch nicht bewertet hatte, ist
+    keine Zeile mit geratenem Wert wert.
+    """
+    if not ZIEL.exists():
+        print("[tm] keine tm_players.csv")
+        return
+    with open(ZIEL, encoding="utf-8", newline="") as f:
+        alle = [{**{s: "" for s in SPALTEN}, **z} for z in csv.DictReader(f)]
+
+    bekannt = gelesene_marktwerte()
+    if not bekannt:
+        print("[tm] kein gespeicherter Verlauf - erst --marktwerte laufen lassen")
+        return
+
+    vorher = sum(1 for z in alle if z["mw_vor_saison"])
+    getroffen = _marktwerte_schreiben(alle, bekannt)
+    print(f"[tm] {len(bekannt)} Verlaeufe -> {getroffen} von {len(alle)} Zeilen "
+          f"mit Vorsaison-Marktwert ({getroffen - vorher:+d})")
+    nach_saison: dict[str, list[int]] = {}
+    for z in alle:
+        nach_saison.setdefault(z["season"], []).append(1 if z["mw_vor_saison"] else 0)
+    for saison in sorted(nach_saison)[-3:]:
+        w = nach_saison[saison]
+        print(f"  {saison}: {sum(w)}/{len(w)}")
 
 
 def neu_zuordnen_offline() -> None:
@@ -1003,6 +1208,12 @@ def main() -> None:
     ap.add_argument("--profile", action="store_true",
                     help="Vollnamen aus den Spielerprofilen nachholen, wo ein "
                          "Stammspieler sonst unzugeordnet bleibt")
+    ap.add_argument("--marktwerte", action="store_true",
+                    help="datierten Marktwertverlauf je Spieler holen und den "
+                         "Stand zum 1. August je Saison eintragen")
+    ap.add_argument("--nur-marktwerte", action="store_true",
+                    help="Stichtagswerte aus dem gespeicherten Verlauf neu "
+                         "eintragen, ohne eine Seite zu holen")
     ap.add_argument("--min-minuten", type=int, default=900,
                     help="ab wie vielen Saisonminuten ein Spieler als "
                          "Stammspieler gilt (Default 900)")
@@ -1017,6 +1228,12 @@ def main() -> None:
     if args.profile:
         profile_nachholen(Sitzung(delay=args.delay), args.min_minuten)
         neu_zuordnen_offline()
+        return
+    if args.nur_marktwerte:
+        marktwerte_offline()
+        return
+    if args.marktwerte:
+        marktwerte_holen(Sitzung(delay=args.delay))
         return
 
     # Kickbase kennt nur wenige Saisons als data_*.json; alles Aeltere kommt

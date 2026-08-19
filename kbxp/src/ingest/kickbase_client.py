@@ -244,12 +244,6 @@ class KickbaseClient:
     def performance(self, competition_id: str | int, player_id: str | int) -> Any:
         return self.get(f"/v4/competitions/{competition_id}/players/{player_id}/performance")
 
-    def market_value(self, competition_id: str | int, player_id: str | int, days: int = 365) -> Any:
-        return self.get(f"/v4/competitions/{competition_id}/players/{player_id}/marketValue/{days}")
-
-    def matchdays(self, competition_id: str | int) -> Any:
-        return self.get(f"/v4/competitions/{competition_id}/matchdays")
-
 
 def enable_utf8_stdout() -> None:
     """Windows-Konsole nutzt sonst cp1252 und scheitert an Sonderzeichen."""

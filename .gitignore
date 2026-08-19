@@ -9,6 +9,7 @@ __pycache__/
 .vs/
 .vscode/
 .claude/
+.agents/
 
 # Backups
 backup_*/

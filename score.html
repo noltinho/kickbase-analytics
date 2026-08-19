@@ -486,14 +486,18 @@ async function boot() {
     /* Vorbelegung des Spieltagsfilters: nächster Spieltag bis Ende der Hinrunde.
        Das ist der Anwendungsfall — die Hinrunde am Stück bewerten, nicht die
        nächste Partie. Seed 0, damit vor dem 1. Spieltag auch bei ST 1 begonnen
-       wird. Ist die Hinrunde durch, bleibt der Rest der Saison stehen. */
+       wird. Ist die Hinrunde durch, bleibt der Rest der Saison stehen. Eine
+       eigene Auswahl schlägt die Vorbelegung — sonst wäre sie nach jedem
+       gespielten Spieltag wieder überschrieben. */
     const totalDays  = matchdays.matchdays.reduce((max, md) => Math.max(max, md.day), 0) || 34;
     const hinrunde   = hinrundeEnde(matchdays) || Math.floor(totalDays / 2);
     const currentDay = matchdays.matchdays.reduce((max, md) =>
       md.matches.some(m => m.st === 2) ? Math.max(max, md.day) : max, 0);
     const dayFrom    = Math.min(currentDay + 1, totalDays);
-    document.getElementById('day-from').value = dayFrom;
-    document.getElementById('day-to').value   = dayFrom > hinrunde ? totalDays : hinrunde;
+    const stored     = storedDayRange(currentSeason().key);
+    document.getElementById('day-from').value = stored ? stored.from : dayFrom;
+    document.getElementById('day-to').value   = stored ? stored.to
+                                             : (dayFrom > hinrunde ? totalDays : hinrunde);
     gespielteTage = playedDays(matchdays).size;
 
     ratings = await loadRatings();
@@ -649,6 +653,7 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
     if (elId === 'day-from' && from > to) to   = from;
     if (elId === 'day-to'   && to < from) from = to;
     fe.value = from; te.value = to;
+    saveDayRange(currentSeason().key, from, to);
     renderTable();
   });
 });

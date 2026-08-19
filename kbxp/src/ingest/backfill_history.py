@@ -17,6 +17,7 @@ die aktuell in der 2. Liga stehen.
 
 Aufruf (aus kbxp/):
     python -m src.ingest.backfill_history --workers 3
+    python -m src.ingest.backfill_history --refresh    # laufende Saison nachziehen
 """
 
 from __future__ import annotations
@@ -174,6 +175,94 @@ def current_bl2_player_ids() -> set[int]:
     return {int(p["id"]) for p in data.get("players", []) if str(p.get("id", "")).isdigit()}
 
 
+def refresh(args: argparse.Namespace) -> None:
+    """Laufende Saison fuer die aktuellen Kader nachziehen.
+
+    Das Done-Protokoll meint "Historie vollstaendig geholt", nicht "auf
+    Tagesstand" - ohne diesen Modus friert jeder Spieler auf dem Zeitpunkt
+    seines Crawls ein und nur neu indizierte Spieler braechten frische
+    Spieltage mit. Hier bekommt jeder Kaderspieler aus data_1/data_2 einen
+    Call gegen seine Competition; von der Antwort bleiben nur die Zeilen der
+    laufenden Saison und landen als neue Teildatei neben den alten.
+    consolidate() laesst beim Eindampfen die juengere Version gewinnen.
+
+    Das Protokoll bleibt unberuehrt: ein Kaderspieler ohne vollstaendige
+    Historie (noch nicht im Index) bleibt offen und wird vom normalen Lauf
+    komplett geholt - die Ueberschneidung dedupliziert consolidate().
+    """
+    from ..paths import LEGACY_DIR
+
+    with open(LEGACY_DIR / "seasons.json", encoding="utf-8") as f:
+        meta = json.load(f)
+    current_title = next(s["title"] for s in meta["seasons"] if s["key"] == meta["current"])
+
+    # Je Spieler die Competition, in der er gerade spielt - nur dort haengt
+    # /performance die laufende Saison an die Historie an.
+    comp_by_pid: dict[int, str] = {}
+    for comp, name in (("1", "data_1.json"), ("2", "data_2.json")):
+        path = LEGACY_DIR / name
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        for p in data.get("players", []):
+            if str(p.get("id", "")).isdigit():
+                comp_by_pid[int(p["id"])] = comp
+
+    todo = sorted(comp_by_pid)
+    if args.limit:
+        todo = todo[: args.limit]
+    if not todo:
+        raise SystemExit(f"keine Kaderspieler gefunden - fehlt {LEGACY_DIR / 'data_1.json'}?")
+
+    est = len(todo) * args.delay / args.workers / 60
+    print(f"[refresh] Saison {current_title}, Kaderspieler: {len(todo)}")
+    print(f"[refresh] {args.workers} Worker, {args.delay}s Delay -> ca. {est:.0f} min")
+
+    client = KickbaseClient(delay=args.delay, verbose=True)
+    client.login()
+
+    rows_all: list[dict] = []
+    matches_all: list[dict] = []
+    counters = {"done": 0, "rows": 0}
+
+    def handle(pid: int) -> None:
+        payload = client.performance(comp_by_pid[pid], pid)
+        rows: list[dict] = []
+        matches: list[dict] = []
+        if isinstance(payload, dict):
+            rows, matches = parse_player(pid, payload)
+        with _lock:
+            rows_all.extend(r for r in rows if r["season"] == current_title)
+            matches_all.extend(m for m in matches if m["season"] == current_title)
+            counters["done"] += 1
+            if counters["done"] % 100 == 0:
+                print(f"  [{counters['done']}/{len(todo)}] {len(rows_all)} Zeilen")
+
+    try:
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            list(ex.map(handle, todo))
+    except KeyboardInterrupt:
+        # Anders als der Backfill schreibt der Refresh erst am Ende - ein
+        # halber Stand braechte nichts, der naechste Lauf holt ohnehin alles.
+        print("\n[refresh] abgebrochen - nichts geschrieben")
+        return
+
+    if not rows_all:
+        print("[refresh] keine Zeilen zur laufenden Saison erhalten - nichts geschrieben")
+        return
+
+    part_no = 1 + max((int(p.stem.rsplit("_", 1)[-1]) for p in INTERIM.glob("panel_part_*.parquet")
+                       if p.stem.rsplit("_", 1)[-1].isdigit()), default=0)
+    pd.DataFrame(rows_all).to_parquet(INTERIM / f"panel_part_{part_no:03d}.parquet", index=False)
+    pd.DataFrame(matches_all).to_parquet(INTERIM / f"matches_part_{part_no:03d}.parquet", index=False)
+    print(f"[refresh] {len(rows_all):,} Zeilen fuer {counters['done']} Spieler "
+          f"-> panel_part_{part_no:03d}.parquet")
+    print(f"[refresh] Requests: ok={client.stats.ok} notfound={client.stats.not_found} "
+          f"err={client.stats.errors} 429={client.stats.rate_limited}")
+    consolidate()
+
+
 def main() -> None:
     enable_utf8_stdout()
     ensure_dirs()
@@ -185,10 +274,17 @@ def main() -> None:
     ap.add_argument("--consolidate", action="store_true",
                     help="nur Teildateien zusammenfuehren und Teams herleiten - "
                          "offline, ohne Login")
+    ap.add_argument("--refresh", action="store_true",
+                    help="laufende Saison fuer die aktuellen Kader nachziehen - "
+                         "ein Request je Spieler in data_1/data_2")
     args = ap.parse_args()
 
     if args.consolidate:
         consolidate()
+        return
+
+    if args.refresh:
+        refresh(args)
         return
 
     if not PLAYER_INDEX.exists():
@@ -414,8 +510,11 @@ def consolidate() -> None:
     # Partie in seine Historie ein (beobachtet bei 623 Knoche und 4590 Omlin).
     # Nur eine davon ist sein tatsaechlicher Einsatz. Nach Minuten sortieren
     # und die oberste behalten, sonst gewinnt die 0-Minuten-Zeile per Zufall
-    # der Reihenfolge und ein realer Einsatz verschwindet.
-    panel = (panel.sort_values(["player_id", "season", "league", "matchday", "minutes"])
+    # der Reihenfolge und ein realer Einsatz verschwindet. Stabil sortieren:
+    # bei gleichen Minuten (etwa der --refresh einer noch nicht gespielten
+    # Zeile) entscheidet die Teildatei-Reihenfolge, und die juengere gewinnt.
+    panel = (panel.sort_values(["player_id", "season", "league", "matchday", "minutes"],
+                               kind="stable")
              .drop_duplicates(subset=["player_id", "season", "league", "matchday"],
                               keep="last"))
     panel = panel.sort_values(["season", "league", "matchday", "player_id"]).reset_index(drop=True)
@@ -431,8 +530,10 @@ def consolidate() -> None:
 
     matches = pd.concat([pd.read_parquet(p) for p in match_parts], ignore_index=True)
     matches["match_date"] = pd.to_datetime(matches["match_date"], format="ISO8601", utc=True)
-    # Jedes Spiel taucht einmal pro beteiligtem Spieler auf - auf match_id eindampfen.
-    matches = matches.drop_duplicates(subset=["season", "league", "match_id"])
+    # Jedes Spiel taucht einmal pro beteiligtem Spieler auf - auf match_id
+    # eindampfen. keep="last", damit nach einem --refresh das gespielte
+    # Ergebnis die vor Saisonstart gecrawlte Terminzeile ersetzt.
+    matches = matches.drop_duplicates(subset=["season", "league", "match_id"], keep="last")
     matches = matches.sort_values(["season", "league", "matchday", "match_id"]).reset_index(drop=True)
 
     panel = derive_teams(panel, matches)

@@ -75,7 +75,32 @@ unten stammen aus Live-Tests dieses Projekts (Juli 2026).
 | `pt` | Spieltag | Team-ID **des Spielers** (zur Heim/Auswärts-Ableitung) |
 | `t1`,`t2`,`t1g`,`t2g` | Spieltag | Teams + Endergebnis des Spiels |
 | `mdst` | Spieltag | Matchday-Status (`2` = beendet) |
-| `k` | Spieltag | Event-Codes (Tore/Assists/Karten als Zahl-Array) |
+| `k` | Spieltag | Event-Codes (Zahl-Array, siehe Tabelle unten) |
+
+### Event-Codes in `k`
+
+Nicht dokumentiert, sondern **aus den Daten hergeleitet**: Regression der
+Spieltagspunkte auf Einsatzminuten plus Dummy je Code, über 163.304
+Spieltage mit Einsatz (`kbxp/data/processed/panel.parquet`). Der Effekt ist
+der Punktebeitrag des Codes, kontrolliert für Minuten.
+
+| Code | Effekt | n | Bedeutung |
+|---|---|---|---|
+| `1` | +99 | 9.172 | Tor (ST 39 %, FL 18 %, ZOM 12 %) |
+| `3` | +70 | 6.474 | Vorlage |
+| `4` | −22 | 12.424 | Gelbe Karte |
+| `5` | −66 | 251 | Gelb-Rote Karte |
+| `6` | −96 | 261 | Rote Karte (IV 35 %) |
+| `2` | −92 | 237 | Eigentor |
+| `8` | −9 | 19.509 | Einwechslung |
+| `9` | −19 | 19.605 | Auswechslung |
+| `7` | +99 | 149 | Torhüter-Bonus, **100 % TW**, erst ab 2021/22 |
+| `25` | +55 | 572 | Torhüter-Bonus, **100 % TW**, erst ab 2024/25 |
+
+`7` dürfte der gehaltene Elfmeter sein; `25` taucht erst 2024/25 auf und ist
+damit vermutlich eine Regeländerung im Punktesystem. Beides ist eine
+Vermutung aus der Verteilung, kein verifizierter Befund — die übrigen acht
+Codes sind über Effektgröße *und* Positionsverteilung eindeutig.
 
 > **Wichtig:** `"Bundesliga"` ist Teilstring von `"2. Bundesliga"` – bei der
 > Liga-Filterung **exakt** vergleichen (`==`), nicht mit `in`.

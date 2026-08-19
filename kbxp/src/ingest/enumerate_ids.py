@@ -3,9 +3,10 @@
 Warum ueberhaupt: Die aus data_*.json bekannten ~1.060 IDs sind ausschliesslich
 Spieler, die *heute* in BL1/BL2 stehen. Ein Modell, das nur darauf trainiert,
 sieht nie die Spieler, die aus der Liga verschwunden sind - und genau deren
-Verschwinden korreliert mit Leistung. Der Probe-Lauf (probe_ids.py) hat gezeigt,
-dass abgemeldete IDs sehr wohl aufloesen (z. B. 703 Admir Mehmedi, 9 Saisons),
-also laesst sich der Survivorship-Bias durch einen Vollcrawl beheben.
+Verschwinden korreliert mit Leistung. Ein Probe-Lauf ueber ein geschichtetes
+Sample hat gezeigt, dass abgemeldete IDs sehr wohl aufloesen (z. B. 703 Admir
+Mehmedi, 9 Saisons), also laesst sich der Survivorship-Bias durch einen
+Vollcrawl beheben.
 
 Erkenntnisse aus dem Probe-Lauf, die hier eingebaut sind:
 

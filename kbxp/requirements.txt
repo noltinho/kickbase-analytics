@@ -9,5 +9,9 @@ pyarrow>=16.0
 numpy>=1.26
 scipy>=1.11
 
+# Unabhaengiger Spielermodell-Benchmark (src.model.player_benchmark):
+# regularisierte, splinebasierte und baumbasierte Vergleichsmodelle.
+scikit-learn>=1.4
+
 # Test
 pytest>=8.0

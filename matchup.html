@@ -681,13 +681,16 @@ async function loadSeason() {
 function initAxis() {
   const days = matchdays ? playedDays(matchdays) : playedDaysFallback(rawData);
   axis = buildAxis(cidx, days, isAgg(season));
-  const r = defaultRange(axis);
+  // Zuletzt gewähltes Fenster schlägt das Standardfenster; die Achse kann seither
+  // gewachsen oder (nach Saisonwechsel) kürzer sein, deshalb hinterher klemmen.
+  const r = storedDayRange(season) || defaultRange(axis);
   const fromEl = document.getElementById('day-from');
   const toEl   = document.getElementById('day-to');
   fromEl.min = toEl.min = 1;
   fromEl.max = toEl.max = Math.max(1, axis.length);
   fromEl.value = r.from;
   toEl.value   = r.to;
+  clampRange(fromEl, toEl, axis, 'to');
 }
 
 function getRange() {
@@ -947,9 +950,10 @@ document.getElementById('filter-season').addEventListener('change', function() {
 
 ['day-from','day-to'].forEach(id => {
   document.getElementById(id).addEventListener('change', function() {
-    clampRange(document.getElementById('day-from'),
-               document.getElementById('day-to'),
-               axis, id === 'day-from' ? 'from' : 'to');
+    const r = clampRange(document.getElementById('day-from'),
+                         document.getElementById('day-to'),
+                         axis, id === 'day-from' ? 'from' : 'to');
+    saveDayRange(season, r.from, r.to);
     render();
   });
 });

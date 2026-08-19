@@ -22,6 +22,7 @@
 
 const SEASON_AGG    = 'agg';
 const SEASON_KEY    = 'kickbase_season';   // Basis; je Seite um den Dateinamen ergänzt
+const DAYS_KEY      = 'kickbase_days';     // dito, zusätzlich um die Saisonsicht
 const POS_ORDER     = [1, 2, 3, 4];
 
 const SRC_LABEL = { same: '', up: 'Aufsteiger', down: 'Absteiger', new: 'Neuling' };
@@ -78,6 +79,30 @@ function storedSeason() {
 
 function saveSeason(key) {
   localStorage.setItem(seasonStorageKey(), key);
+}
+
+/* ─── Spieltagsfenster merken ────────────────────────────────
+   Wie die Saison je Seite, zusätzlich aber je Saisonsicht: die Eingaben sind
+   Achsen-Indizes, und in der Aggregat-Sicht ist die Achse doppelt so lang. Ein
+   gemeinsamer Schlüssel würde das Fenster beim Umschalten auf die kürzere
+   Achse stauchen — und beim Zurückschalten käme es nicht wieder. */
+function dayStorageKey(season) {
+  const page = (location.pathname.split('/').pop() || '').replace(/\.html$/, '');
+  return `${DAYS_KEY}_${page || 'index'}_${season}`;
+}
+
+function storedDayRange(season) {
+  try {
+    const v = JSON.parse(localStorage.getItem(dayStorageKey(season)) || 'null');
+    if (v && Number.isFinite(v.from) && Number.isFinite(v.to)) return v;
+  } catch (e) { /* beschädigter Eintrag — dann eben das Standardfenster */ }
+  return null;
+}
+
+function saveDayRange(season, from, to) {
+  try {
+    localStorage.setItem(dayStorageKey(season), JSON.stringify({ from, to }));
+  } catch (e) { /* voller oder gesperrter Speicher; kein Grund, die Seite zu stören */ }
 }
 
 function seasonLabel(key) {
