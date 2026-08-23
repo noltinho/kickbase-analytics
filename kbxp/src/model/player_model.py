@@ -77,15 +77,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
 from src.model.player_features import (  # noqa: E402
     lade_panel, lade_tm, spieler_saisons, team_niveaus, tm_je_spieler,
 )
 from src.model.team_strength import (  # noqa: E402
     conceded_from_panel, load_splits, pairwise_accuracy,
 )
-from src.paths import LEGACY_DIR, MANUAL, PROCESSED  # noqa: E402
+from src.paths import LEGACY_DIR, MANUAL, PROCESSED, atomic_write_json  # noqa: E402
 
 # --- Prior-Kette ------------------------------------------------------------
 #
@@ -1588,20 +1586,6 @@ def _verfuegbarkeit() -> dict[int, tuple[float, bool]]:
     return out
 
 
-def _override() -> pd.DataFrame | None:
-    """Manuelle Minuten je Spieltag — das scores-edit-Muster als Datei.
-
-    Die Abweichung liegt getrennt vom Modellwert und ueberlebt jede
-    Neuberechnung; kategorie kann Rotation durch Dreifachbelastung o. ae.
-    nicht ausdruecken, diese Datei schon. Fehlt sie, passiert nichts.
-    """
-    pfad = MANUAL / "minuten_override.csv"
-    if not pfad.exists():
-        return None
-    df = pd.read_csv(pfad)
-    return df if len(df) else None
-
-
 # Niveauversatz fuer die Spieler, von denen die Kaderpflege sagt, dass sie
 # spielen (Kategorie 1-2). Er wird **abgezogen**, die Werte sind negativ: das
 # Modell liegt fuer diese Gruppe zu tief.
@@ -1908,8 +1892,7 @@ def export(path: Path | None = None) -> dict:
         },
     }
     target = path or (LEGACY_DIR / "player_projections.json")
-    with open(target, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=1)
+    atomic_write_json(target, payload)
     return payload
 
 

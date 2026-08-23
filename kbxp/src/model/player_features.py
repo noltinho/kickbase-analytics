@@ -17,13 +17,8 @@ traegt keine Leistung.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from src.model.team_strength import before_break, fit_ratings  # noqa: E402
 from src.paths import MANUAL, PROCESSED  # noqa: E402

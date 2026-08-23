@@ -29,9 +29,11 @@ from __future__ import annotations
 
 import argparse
 import bisect
+from contextlib import contextmanager
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 from collections import Counter
@@ -75,6 +77,51 @@ DEFAULT_MANIFEST = {
 
 def data_path(filename: str) -> str:
     return os.path.join(DATA_DIR, filename)
+
+
+@contextmanager
+def atomic_text_file(path: str):
+    """Textdatei im Zielordner schreiben und erst vollstaendig ersetzen.
+
+    Ein abgebrochener Fetch darf insbesondere ``history.json`` nicht
+    verstuemmeln: die Marktwert-Historie ist nach Ablauf des API-Fensters nicht
+    wiederherstellbar. Die temporaere Datei liegt auf demselben Dateisystem,
+    damit ``os.replace`` atomar bleibt.
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(path) + ".",
+                               suffix=".tmp", dir=os.path.dirname(path), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            yield f
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _json_temp(path: str, payload: Any, indent: int = 2) -> str:
+    """Vollstaendige JSON-Datei neben ``path`` vorbereiten, noch nicht ersetzen."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(path) + ".",
+                               suffix=".tmp", dir=os.path.dirname(path), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=indent)
+            f.flush()
+            os.fsync(f.fileno())
+        return tmp
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def day_number(d: date) -> int:
@@ -293,8 +340,7 @@ def load_manifest() -> dict:
 
 
 def save_manifest(manifest: dict) -> None:
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(data_path(MANIFEST_FILE), "w", encoding="utf-8") as f:
+    with atomic_text_file(data_path(MANIFEST_FILE)) as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
 
@@ -343,9 +389,8 @@ def save_history(players: dict) -> None:
     Zeile setzen und die Datei vervielfachen; ohne Zeilenumbrueche waere jeder
     Git-Diff die ganze Datei. Eine Zeile je Spieler ist beides nicht.
     """
-    os.makedirs(DATA_DIR, exist_ok=True)
     rows = sorted(players.items(), key=lambda kv: int(kv[0]))
-    with open(data_path(HISTORY_FILE), "w", encoding="utf-8") as f:
+    with atomic_text_file(data_path(HISTORY_FILE)) as f:
         f.write("{\n")
         f.write(f'  "generated_at": {json.dumps(datetime.now().isoformat())},\n')
         f.write('  "players": {\n')
@@ -670,16 +715,30 @@ def write_data(comp: dict, season: dict, teams: dict, players: list[dict],
     name = competition_name(comp, season)
     now = datetime.now().isoformat()
 
-    with open(data_path(data_file), "w", encoding="utf-8") as f:
-        json.dump({"generated_at": now, "competition": name,
-                   "teams": teams, "players": players}, f, ensure_ascii=False, indent=2)
+    data_target, md_target = data_path(data_file), data_path(md_file)
+    data_tmp = _json_temp(data_target, {"generated_at": now, "competition": name,
+                                        "teams": teams, "players": players})
+    try:
+        md_tmp = _json_temp(md_target, {"generated_at": now, "competition": name,
+                                        "matchdays": matchdays})
+    except BaseException:
+        os.unlink(data_tmp)
+        raise
+    # Beide Dateien sind jetzt gueltige, vollstaendige JSONs. Erst danach wird
+    # das Paar ersetzt; so bleibt bei Fehlern waehrend des Schreibens der alte
+    # konsistente Stand erhalten.
+    try:
+        os.replace(data_tmp, data_target)
+        os.replace(md_tmp, md_target)
+    finally:
+        for tmp in (data_tmp, md_tmp):
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
     print(f"\n  ✓ {data_file}: {len(players)} Spieler "
-          f"({os.path.getsize(data_path(data_file))/1024:.0f} KB)")
-
-    with open(data_path(md_file), "w", encoding="utf-8") as f:
-        json.dump({"generated_at": now, "competition": name,
-                   "matchdays": matchdays}, f, ensure_ascii=False, indent=2)
-    print(f"  ✓ {md_file} ({os.path.getsize(data_path(md_file))/1024:.0f} KB)")
+          f"({os.path.getsize(data_target)/1024:.0f} KB)")
+    print(f"  ✓ {md_file} ({os.path.getsize(md_target)/1024:.0f} KB)")
 
 
 def load_existing(comp: dict, season: dict) -> tuple[dict, dict]:
@@ -988,8 +1047,7 @@ def build_ratings() -> None:
 
 def save_carryover(payload: dict) -> None:
     """Ein Team pro Zeile - wie bei history.json, aus demselben Diff-Grund."""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(data_path(CARRYOVER_FILE), "w", encoding="utf-8") as f:
+    with atomic_text_file(data_path(CARRYOVER_FILE)) as f:
         f.write("{\n")
         for key in ("generated_at", "current", "prev", "pos_order", "factors"):
             f.write(f'  "{key}": {json.dumps(payload[key], separators=(",", ":"))},\n')

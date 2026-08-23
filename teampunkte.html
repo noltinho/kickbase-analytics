@@ -517,12 +517,12 @@
   <!-- FILTER BAR -->
   <div class="filter-bar">
     <div class="filter-group">
-      <label>Saison</label>
+      <label for="filter-season">Saison</label>
       <select id="filter-season"><!-- aus data/seasons.json gefüllt --></select>
     </div>
 
     <div class="filter-group">
-      <label>Heim / Auswärts</label>
+      <label for="filter-venue">Heim / Auswärts</label>
       <select id="filter-venue">
         <option value="all">Alle Spiele</option>
         <option value="home">Heimspiele</option>
@@ -533,17 +533,17 @@
     <div class="filter-group">
       <label>Spieltag von / bis</label>
       <div class="day-range-wrap">
-        <input type="number" id="day-from" min="1" max="34" value="1" />
+        <input type="number" id="day-from" min="1" max="34" value="1" aria-label="Erster Spieltag" />
         <span class="day-range-sep">–</span>
-        <input type="number" id="day-to"   min="1" max="34" value="34" />
+        <input type="number" id="day-to"   min="1" max="34" value="34" aria-label="Letzter Spieltag" />
       </div>
     </div>
 
     <div class="filter-group">
       <label>Ansicht</label>
-      <div class="toggle-group">
-        <button class="toggle-btn active" id="view-norm">⌀ JE STARTER</button>
-        <button class="toggle-btn"        id="view-total">GESAMT</button>
+      <div class="toggle-group" role="group" aria-label="Darstellung">
+        <button type="button" class="toggle-btn active" id="view-norm" aria-pressed="true">⌀ JE STARTER</button>
+        <button type="button" class="toggle-btn"        id="view-total" aria-pressed="false">GESAMT</button>
       </div>
     </div>
   </div>
@@ -1170,12 +1170,16 @@ document.getElementById('view-norm').addEventListener('click', function() {
   useNorm = true;
   this.classList.add('active');
   document.getElementById('view-total').classList.remove('active');
+  this.setAttribute('aria-pressed', 'true');
+  document.getElementById('view-total').setAttribute('aria-pressed', 'false');
   render();
 });
 document.getElementById('view-total').addEventListener('click', function() {
   useNorm = false;
   this.classList.add('active');
   document.getElementById('view-norm').classList.remove('active');
+  this.setAttribute('aria-pressed', 'true');
+  document.getElementById('view-norm').setAttribute('aria-pressed', 'false');
   render();
 });
 
@@ -1189,7 +1193,11 @@ document.getElementById('view-total').addEventListener('click', function() {
   });
 });
 
-boot();
+boot().catch(e => {
+  document.getElementById('bands-grid').innerHTML = '';
+  document.getElementById('table-body').innerHTML =
+    `<tr><td colspan="9"><div class="state-msg"><strong>FEHLER</strong>${e.message}</div></td></tr>`;
+});
 </script>
 </body>
 </html>

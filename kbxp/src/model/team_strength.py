@@ -54,10 +54,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
 from src.model import season_odds  # noqa: E402
-from src.paths import LEGACY_DIR, PROCESSED  # noqa: E402
+from src.paths import LEGACY_DIR, PROCESSED, atomic_write_json  # noqa: E402
 
 # Aus dem Reichweiten-Experiment; beide Optima sind flach, eine Feinjustage je
 # Liga oder Saison bringt nichts.
@@ -352,7 +350,7 @@ def classify(value: float, breaks: list[float], smin: int = -3) -> int:
     """Wert in -3..+3 einordnen - gleiche Regel wie classify() in common.js."""
     for i in range(len(breaks) - 2, -1, -1):
         if value >= breaks[i]:
-            return i - 3
+            return smin + i
     return smin
 
 
@@ -715,7 +713,7 @@ def export(path: Path | None = None) -> dict:
     carry = _carryover()
     payload = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "model": "ridge-v1",
+        "model": "ridge-v2",
         "decay": DECAY,
         "prev_weight": PREV_WEIGHT,
         "lambda": LAMBDA,
@@ -732,8 +730,7 @@ def export(path: Path | None = None) -> dict:
             payload["leagues"][liga] = league
 
     target = path or (LEGACY_DIR / "ratings.json")
-    with open(target, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=1)
+    atomic_write_json(target, payload)
     return payload
 
 

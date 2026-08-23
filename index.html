@@ -192,6 +192,11 @@
     }
 
     .liga-btn:hover:not(.active) { color: var(--text); }
+    .liga-btn:focus-visible,
+    .card:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
 
     @media (max-width: 700px) {
       html, body { overflow: auto; height: auto; }
@@ -220,9 +225,9 @@
     <p class="hero-by">by Noltinho</p>
   </section>
 
-  <div class="liga-toggle">
-    <button class="liga-btn" id="btn-bl1" onclick="setLiga('1')">Bundesliga</button>
-    <button class="liga-btn" id="btn-bl2" onclick="setLiga('2')">2. Bundesliga</button>
+  <div class="liga-toggle" role="group" aria-label="Liga auswählen">
+    <button type="button" class="liga-btn" id="btn-bl1" onclick="setLiga('1')" aria-pressed="false">Bundesliga</button>
+    <button type="button" class="liga-btn" id="btn-bl2" onclick="setLiga('2')" aria-pressed="false">2. Bundesliga</button>
   </div>
 
   <div class="grid">
@@ -273,8 +278,11 @@
 <script>
   function setLiga(v) {
     localStorage.setItem('kickbase_liga', v);
-    document.getElementById('btn-bl1').classList.toggle('active', v === '1');
-    document.getElementById('btn-bl2').classList.toggle('active', v === '2');
+    for (const [id, selected] of [['btn-bl1', v === '1'], ['btn-bl2', v === '2']]) {
+      const button = document.getElementById(id);
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    }
   }
   setLiga(localStorage.getItem('kickbase_liga') || '2');
 

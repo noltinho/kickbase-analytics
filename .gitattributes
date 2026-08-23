@@ -1,0 +1,19 @@
+* text=auto
+
+*.py text eol=lf
+*.js text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.parquet binary
+
+data/data_*.json linguist-generated=true
+data/history.json linguist-generated=true
+data/matchdays_*.json linguist-generated=true
+data/carryover.json linguist-generated=true
+data/player_projections*.json linguist-generated=true
+data/ratings.json linguist-generated=true
+data/season_odds_cache.json linguist-generated=true

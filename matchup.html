@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kickbase · Matchup Rechner</title>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+          integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"
+          crossorigin="anonymous"></script>
   <style>
     :root {
       --bg: #131417;
@@ -458,12 +460,12 @@
   <!-- FILTER BAR -->
   <div class="filter-bar">
     <div class="filter-group">
-      <label>Saison</label>
+      <label for="filter-season">Saison</label>
       <select id="filter-season"><!-- aus data/seasons.json gefüllt --></select>
     </div>
 
     <div class="filter-group">
-      <label>Position</label>
+      <label for="filter-pos">Position</label>
       <select id="filter-pos">
         <option value="all">Alle Positionen</option>
         <option value="1">TW — Torwart</option>
@@ -474,7 +476,7 @@
     </div>
 
     <div class="filter-group">
-      <label>Heim / Auswärts</label>
+      <label for="filter-venue">Heim / Auswärts</label>
       <select id="filter-venue">
         <option value="all">Alle Spiele</option>
         <option value="home">Heimspiele</option>
@@ -485,25 +487,25 @@
     <div class="filter-group">
       <label>Spieltag von / bis</label>
       <div class="day-range-wrap">
-        <input type="number" id="day-from" min="1" max="34" value="1" />
+        <input type="number" id="day-from" min="1" max="34" value="1" aria-label="Erster Spieltag" />
         <span class="day-range-sep">–</span>
-        <input type="number" id="day-to"   min="1" max="34" value="34" />
+        <input type="number" id="day-to"   min="1" max="34" value="34" aria-label="Letzter Spieltag" />
       </div>
     </div>
 
     <div class="filter-group">
       <label>Sortierung</label>
-      <div class="toggle-group">
-        <button class="toggle-btn active" id="sort-desc">↓ Mehr</button>
-        <button class="toggle-btn"        id="sort-asc">↑ Weniger</button>
+      <div class="toggle-group" role="group" aria-label="Sortierreihenfolge">
+        <button type="button" class="toggle-btn active" id="sort-desc" aria-pressed="true">↓ Mehr</button>
+        <button type="button" class="toggle-btn"        id="sort-asc" aria-pressed="false">↑ Weniger</button>
       </div>
     </div>
 
     <div class="filter-group">
       <label>Ansicht</label>
-      <div class="toggle-group">
-        <button class="toggle-btn active" id="view-total">TOTAL</button>
-        <button class="toggle-btn"        id="view-avg">⌀ PRO ST</button>
+      <div class="toggle-group" role="group" aria-label="Darstellung">
+        <button type="button" class="toggle-btn active" id="view-total" aria-pressed="true">TOTAL</button>
+        <button type="button" class="toggle-btn"        id="view-avg" aria-pressed="false">⌀ PRO ST</button>
       </div>
     </div>
   </div>
@@ -964,12 +966,16 @@ document.getElementById('sort-desc').addEventListener('click', function() {
   sortDir = 'desc';
   this.classList.add('active');
   document.getElementById('sort-asc').classList.remove('active');
+  this.setAttribute('aria-pressed', 'true');
+  document.getElementById('sort-asc').setAttribute('aria-pressed', 'false');
   render();
 });
 document.getElementById('sort-asc').addEventListener('click', function() {
   sortDir = 'asc';
   this.classList.add('active');
   document.getElementById('sort-desc').classList.remove('active');
+  this.setAttribute('aria-pressed', 'true');
+  document.getElementById('sort-desc').setAttribute('aria-pressed', 'false');
   render();
 });
 
@@ -977,16 +983,23 @@ document.getElementById('view-total').addEventListener('click', function() {
   useAvg = false;
   this.classList.add('active');
   document.getElementById('view-avg').classList.remove('active');
+  this.setAttribute('aria-pressed', 'true');
+  document.getElementById('view-avg').setAttribute('aria-pressed', 'false');
   render();
 });
 document.getElementById('view-avg').addEventListener('click', function() {
   useAvg = true;
   this.classList.add('active');
   document.getElementById('view-total').classList.remove('active');
+  this.setAttribute('aria-pressed', 'true');
+  document.getElementById('view-total').setAttribute('aria-pressed', 'false');
   render();
 });
 
-boot();
+boot().catch(e => {
+  document.getElementById('table-body').innerHTML =
+    `<tr><td colspan="8"><div class="state-msg"><strong>FEHLER</strong>${e.message}</div></td></tr>`;
+});
 </script>
 </body>
 </html>

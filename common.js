@@ -31,8 +31,15 @@ const SRC_LABEL = { same: '', up: 'Aufsteiger', down: 'Absteiger', new: 'Neuling
 
 let SEASONS = null;
 
+async function fetchJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  try { return await response.json(); }
+  catch (error) { throw new Error(`${url}: ungültiges JSON (${error.message})`); }
+}
+
 async function loadSeasonManifest() {
-  SEASONS = await fetch('data/seasons.json').then(r => r.json());
+  SEASONS = await fetchJson('data/seasons.json');
   return SEASONS;
 }
 
@@ -141,8 +148,7 @@ function fillSeasonSelect(el, value, withAgg) {
 
 async function loadCarryover() {
   try {
-    const r = await fetch('data/carryover.json');
-    return r.ok ? await r.json() : null;
+    return await fetchJson('data/carryover.json');
   } catch (_) { return null; }
 }
 
@@ -305,6 +311,7 @@ function clampRange(fromEl, toEl, axis, changed) {
 /* ─── Teamstärke ────────────────────────────────────────── */
 
 function safeJenks(values, k) {
+  if (!values.length) return Array(k + 1).fill(0);
   try { return ss.jenks(values, k); }
   catch (_) {
     const s = values.slice().sort((a, b) => a - b);
@@ -315,7 +322,7 @@ function safeJenks(values, k) {
 
 function classify(value, breaks, smin) {
   for (let i = breaks.length - 2; i >= 0; i--) {
-    if (value >= breaks[i]) return i - 3;
+    if (value >= breaks[i]) return smin + i;
   }
   return smin;
 }
@@ -410,8 +417,7 @@ function computeBaseScores(rawData, cidx, axis, range, decay = 0.95, smin = -3) 
 
 async function loadRatings() {
   try {
-    const r = await fetch('data/ratings.json');
-    return r.ok ? await r.json() : null;
+    return await fetchJson('data/ratings.json');
   } catch (_) { return null; }
 }
 

@@ -22,12 +22,12 @@ Diese Datei ist die Landkarte. Ein Thema steht bewusst woanders:
 | [matchup.html](matchup.html) | *Zugelassene* Punkte je Team, nach Position filterbar — die Rohsicht hinter dem Score. |
 | [score.html](score.html) | Matchup-Ranking: Spielplan als Farbraster in Klassen −3…+3, zwei Modi (*Paarung* / *Nur Spielplan*). |
 | [scores-edit.html](scores-edit.html) | Editor für ebendiese Scores. Speichert **Abweichungen** vom Modellwert im `localStorage`; `score.html` legt sie über die frische Basis (`readScoreStore` / `applyScoreDeltas`). Steht nicht im Kachelraster von `index.html`, sondern nur in der Navigationsleiste der Tools („Teamstärke"). |
-| [scatter.html](scatter.html) | Marktwert gegen Punkte, alle Spieler. Drei x-Achsen: *Ø Punkte*, *Ø Bereinigt* und aus `player_projections_avg.json` *Prognose Ø* (gesund und gesetzt, nur Kategorie 1–2). Die Punktgröße trägt in der Prognose die Verlässlichkeit. Der Prognose-Knopf bleibt aus, wenn die Datei fehlt. Vor dem ersten Spieltag startet die Seite von selbst auf *Prognose Ø*, weil `data_1.json` zwar 34 Spieltage trägt, aber überall 0 Punkte und `"0'"` Minuten. **Verletzte fließen nicht in die Fair-Value-Regression**, bleiben aber mit offenem Symbol sichtbar: ihr Marktwert ist ausfallbedingt gedrückt, und `player_projections_avg.json` nennt bewusst den Ertrag *nach* der Rückkehr. Das Rollenmodell bleibt Forschungs- und Vergleichsmodell, wird hier aber nicht mehr angezeigt. |
+| [scatter.html](scatter.html) | Marktwert gegen Punkte, alle Spieler. Drei x-Achsen: *Ø Punkte*, *Ø Bereinigt* und aus `player_projections_avg.json` (Liga 1) beziehungsweise `player_projections_avg_2.json` (Liga 2) *Prognose Ø* — jeweils gesund und gesetzt, Kategorie 1–2. Die Punktgröße trägt in der Prognose die Verlässlichkeit; in Liga 2 nennt der Tooltip zusätzlich die automatisch geschätzte Starter-Wahrscheinlichkeit. Der Prognose-Knopf bleibt aus, wenn die passende Datei fehlt. Vor dem ersten Spieltag startet die Seite von selbst auf *Prognose Ø*, weil `data_{liga}.json` zwar 34 Spieltage trägt, aber überall 0 Punkte und `"0'"` Minuten. **Verletzte fließen nicht in die Fair-Value-Regression**, bleiben aber mit offenem Symbol sichtbar: ihr Marktwert ist ausfallbedingt gedrückt, und die Prognose nennt bewusst den Ertrag *nach* der Rückkehr. Das Rollenmodell bleibt Forschungs- und Vergleichsmodell, wird hier aber nicht mehr angezeigt. |
 | [kbxp/](kbxp/) | Eigenständige Forschungspipeline: Spieler-ID-Crawl, historisches Panel ab 2013/14, Teamstärke-Modell, Spielermodell, Quoten-Inversion, Transfermarkt-Kaderdaten, Tests. |
 | [kbxp/src/model/player_features.py](kbxp/src/model/player_features.py) | Leakagefreier Unterbau des Spielermodells: Panel ohne Saisonendstand-Spalten und mit 90er-Minutendeckel, Kennzahlen je Spielersaison (p90, Minuten je Team-Spieltag, Start-/Joker-/Fehlquote), Teamniveaus je Saison, Kaderkonkurrenz. |
-| [kbxp/src/model/player_avg.py](kbxp/src/model/player_avg.py) | Das **fallweise** Spielermodell, seit August 2026 das zweite im Haus: Zielgröße Ø Punkte je Einsatz, gelernt nur auf gesetzten Spielern, unterschieden nach dem, was über einen Spieler bekannt ist (a eigene Historie · b neue Rolle · c neu in der Liga). Eine Regression, Fall-Dummies mal Grundmerkmale, Mannschaftsteil gemeinsam. Export nach `data/player_projections_avg.json`. Alle Konstanten samt Messaufbau im Moduldocstring. |
+| [kbxp/src/model/player_avg.py](kbxp/src/model/player_avg.py) | Das **fallweise** Spielermodell für beide Ligen: Zielgröße Ø Punkte je Einsatz, gelernt nur auf gesetzten Spielern, unterschieden nach dem, was über einen Spieler bekannt ist (a eigene Historie · b neue Rolle · c neu in der Liga). Beide Ligen verwenden dieselbe gemessene Struktur, aber getrennte Trainingszeilen, Teamniveaus, Koeffizienten und Kalibrierungen. Liga 1 exportiert nach `data/player_projections_avg.json`; Liga 2 nach `data/player_projections_avg_2.json` und bestimmt mangels handgepflegter Kategorien die besten acht Kandidaten je Verein mit einer vorgeschalteten Starter-Logistik. Alle Konstanten samt Messaufbau im Moduldocstring. |
 | [kbxp/src/model/player_model.py](kbxp/src/model/player_model.py) | Das Rollen-Spielermodell: `Ø Punkte je Einsatz = p90 × Minuten je Einsatz(Rolle)`, dazu die Rollenwahrscheinlichkeit als eigener Kanal. Prior-Kette statt Spielerkategorien, Torhüter-Sonderweg, Walk-forward-Backtest samt Orakel-Lauf, Export nach `data/player_projections.json`. Alle gemessenen Konstanten samt Messaufbau im Moduldocstring. |
-| [../spielermodell-befunde.md](../spielermodell-befunde.md) | Messreihe zum **Spielermodell** (Aug 2026), liegt bewusst **außerhalb des Repos** (eine Ebene über dem Projekt): Prognose-Decke und ihre Herleitung, pro-90-Strukturbefund, Benchmark, ökonomischer Wert, Elo-Verwurf, priorisierte Konsequenzen. Vor Arbeit am Spielermodell lesen — sonst wird dort neu gemessen, was schon beziffert ist. |
+| [kbxp/player-benchmark.md](kbxp/player-benchmark.md) | Reproduzierbarer Vergleich der Spielermodelle und ihrer Benchmarks. Enthält Messaufbau, Ergebnisgrenzen und verworfene Ansätze. |
 | [kbxp/data/processed/season_splits.parquet](kbxp/data/processed/season_splits.parquet) | Letzter Spieltag vor der **Winterpause**, je Saison und Liga — das Ende der Hinrunde ist keine feste Zahl (Bundesliga 13–17). Kickbase resettet zur Winterpause, deshalb bewertet `team_strength` nur die Spiele davor (`load_splits()` / `before_break()`). Aus den Terminlücken neu ableiten trifft 19 von 20 — 2019/20 fände man so die Corona-Pause nach Spieltag 25 statt der Winterpause nach 17. Deshalb eingecheckt statt hergeleitet. |
 
 **Zwei getrennte Python-Welten.** `fetch.py` ist Produktion und kommt mit
@@ -44,8 +44,9 @@ Quoten-Inversion. Ein Klon ohne Crawl kann `ratings.json` trotzdem bauen.
 
 **Die Spielermodelle hängen dagegen fest am Panel** und sind deshalb bewusst
 *nicht* in `fetch.py` eingehängt: `player_model.export()` und
-`player_avg.export()` brauchen `panel.parquet` **und** `tm_players.csv`, die
-beide nicht im Repo liegen. Ein weicher Import würde die Garantie oben still
+`player_avg.export()` brauchen `panel.parquet` und `tm_players.csv`. Das Panel
+liegt für reproduzierbare Tests im Repo, die gecrawlte Transfermarkt-Datei
+bewusst nicht. Ein weicher Import würde die Garantie oben still
 aushöhlen. Stattdessen je ein eigenes Kommando. `scatter.html` liest nur die
 fallweise Ausgabe und behandelt sie als optional (404 → der Knopf bleibt aus);
 die Rollenmodell-Ausgabe bleibt für Forschung und Vergleich erhalten.
@@ -66,8 +67,8 @@ Kickbase v4 ──kbxp: enumerate_ids ─► raw/player_index ──backfill_his
                                                                             (nur Forschung, s. u.)
 
 panel.parquet + manual/tm_players.csv + manual/fine_positions.csv
-  + data/ratings.json + data/history.json ─┬─player_model─► data/player_projections.json     (Forschung/Vergleich)
-                                           └─player_avg───► data/player_projections_avg.json ──► scatter.html
+  + data/ratings.json + data/history.json ─┬─player_model─► data/player_projections.json       (Forschung/Vergleich)
+                                           └─player_avg───► data/player_projections_avg{,_2}.json ──► scatter.html
 ```
 
 Drei Dinge, die man dem Quelltext sonst nur mühsam ansieht:
@@ -115,6 +116,8 @@ python -m src.model.player_model --backtest      # walk-forward, vier Vergleichs
 python -m src.model.player_avg                   # player_projections_avg.json schreiben
 python -m src.model.player_avg --backtest        # walk-forward je Fall und Mannschaftsteil
 python -m src.model.player_avg --gitter          # delta, fenster und rho gegeneinander
+python -m src.model.player_avg --liga 2          # player_projections_avg_2.json schreiben
+python -m src.model.player_avg --liga 2 --backtest  # Punkte + Starter-Auswahl walk-forward
 python -m src.model.season_odds [2026/2027]      # Quoten-Inversion gegenprüfen
 python -m src.ingest.transfermarkt               # TM-Kaderdaten, laufende Saison
 python -m src.ingest.transfermarkt --von 2013 --bis 2026   # ganze Historie, ~380 Requests
@@ -316,6 +319,24 @@ der Annahme *keine Verletzungen*: Ausfälle sind nicht vorhersehbar und
 verändern den Schnitt kaum, weil man den Spieler ersetzen kann. Verletzte
 bekommen deshalb die volle Zahl — den Ertrag *nach* der Rückkehr — plus eine
 Markierung, damit `scatter.html` sie aus der Fair-Value-Regression heraushält.
+
+**Liga 2 übernimmt die Struktur, nicht die Liga-1-Koeffizienten.** Historie,
+Vorgängerzellen, Teamstärke, Positionssockel, Fit und Kalibrierung werden je
+Liga getrennt gebildet. Wegen des Panel-Starts 2021/22 ist ihr Walk-forward
+kürzer (Zielsaisons 2023–2025), aber stabil genug für den Produktionsweg:
+gesamt n 647 · r 0,529 · MAE 16,2 · Verzerrung +0,1; Fall a allein n 317 ·
+r 0,591 · MAE 16,2. Eine stumpfe Übernahme des Liga-1-Niveaus wäre trotz
+gleicher Modellform falsch.
+
+**Die Zweitliga-Zielgruppe ist reproduzierbar statt handgepflegt.** Für sie
+existiert keine `fine_positions.csv`. Eine vorgeschaltete Logistik verwendet
+nur vor Saisonbeginn bekannte Größen — Starts und Einsätze aus den letzten
+zwei Saisons, Alter sowie Marktwert-Rang in Verein und Liga — und wählt je
+Verein die besten acht, davon vier als Kategorie 1. Das ergibt wie in Liga 1
+144 Kandidaten. Im Walk-forward 2022–2025 wurden 64,2 % tatsächlich Starter
+(Recall 42,5 %); Verletzungen stecken dabei als nicht vorhersagbarer Teil in
+den vermeintlichen Fehlern. Eine globale Wahrscheinlichkeitsschwelle wurde
+verworfen, weil sie kleine Vereine fast leer und große übervoll ließ.
 
 Drei Fälle, danach unterschieden, was über einen Spieler bekannt ist:
 
@@ -569,9 +590,11 @@ python -m http.server 8000    # dann http://localhost:8000/index.html
   bisher nur die Teamstärke des eigenen Vereins, nicht die der Gegner.
 - **Heimvorteil wird unterschätzt**, weil `hfa` von der Ridge-Strafe
   mitgeschrumpft wird.
-- **Nur Liga 1 wird prognostiziert.** Für Liga 2 fehlt die handgepflegte
-  `fine_positions.csv`; die Panel-Historie reicht dort ohnehin nur bis
-  2021/22.
+- **Die Liga-2-Zielgruppe bleibt der schwächste Kanal.** Mangels
+  handgepflegter Kategorien trifft die Starter-Logistik 64,2 % ihrer acht
+  Kandidaten je Verein. Das reicht für eine ehrliche bedingte Prognose, ist
+  aber klar unter dem Informationsgehalt gepflegter Rollen; Sommertransfers,
+  Verletzungen und Trainerentscheidungen setzen hier die Grenze.
 - **Das fallweise Modell überschätzt die Fälle b und c um +4,7 / +3,7.** Die
   Rückgewichtung (ρ 0,6) hat den größeren Teil geholt, der Rest ist zum guten
   Teil Kohortenglück: der Ist-Schnitt dieser Gruppe schwankt von Saison zu

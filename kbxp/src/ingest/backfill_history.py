@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 
 from ..paths import INTERIM, PROCESSED, RAW, ensure_dirs
-from .kickbase_client import NOT_FOUND, KickbaseClient, enable_utf8_stdout
+from .kickbase_client import KickbaseClient, enable_utf8_stdout
 
 PLAYER_INDEX = RAW / "player_index.parquet"
 DONE_LOG = INTERIM / "backfill_done.jsonl"

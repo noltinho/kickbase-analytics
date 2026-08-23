@@ -1,0 +1,7 @@
+{
+  "name": "kickbase-tools",
+  "private": true,
+  "scripts": {
+    "test:frontend": "node --test tests/*.test.js"
+  }
+}

@@ -13,14 +13,11 @@ Drei Sorten Test:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.paths import LEGACY_DIR, PROCESSED  # noqa: E402
 from src.model.team_strength import (  # noqa: E402
@@ -29,7 +26,7 @@ from src.model.team_strength import (  # noqa: E402
     jenks_breaks, load_splits, pairwise_accuracy, score_metrics,
 )
 from src.model.season_odds import (  # noqa: E402
-    fit_strength, implied_probs, place_probs,
+    _ranking_order, fit_strength, implied_probs, place_probs,
 )
 
 ARCHIVE_SEASON = "2025/2026"
@@ -178,6 +175,8 @@ def test_jenks_and_classify_agree() -> None:
     assert all(b >= a for a, b in zip(classes, classes[1:]))
     # Unterhalb der kleinsten Grenze bleibt es bei -3.
     assert classify(breaks[0] - 1, breaks) == -3
+    # Der Parameter ist Teil des Vertrags und darf nicht still auf -3 festliegen.
+    assert classify(values[-1], breaks, smin=0) == 6
 
 
 def test_export_shape(tmp_path: Path) -> None:
@@ -343,6 +342,17 @@ def test_power_method_shifts_margin_onto_longshots() -> None:
     assert powr["out"] < prop["out"], "Aussenseiter muss fallen"
 
 
+def test_table_ranking_uses_goals_after_points_and_goal_difference() -> None:
+    """Erzielte Tore duerfen nicht ab einer willkuerlichen Grenze verschwinden."""
+    pts = np.array([[60, 60, 58]])
+    gd = np.array([[20, 20, 30]])
+    gf = np.array([[30, 50, 80]])
+    # Team 1 schlaegt Team 0 erst im dritten Kriterium; Team 2 bleibt trotz
+    # besserer Tordifferenz wegen weniger Punkten dahinter.
+    assert _ranking_order(pts, gd, gf).tolist() == [[1, 0, 2]]
+
+
+@pytest.mark.slow
 def test_odds_inversion_reproduces_the_market() -> None:
     """Die Simulation muss die Quoten treffen, aus denen sie abgeleitet wurde.
 

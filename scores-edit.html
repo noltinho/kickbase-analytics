@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kickbase · Schwierigkeits-Scores</title>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"
+          integrity="sha384-j4Ga4vVTRhNtxxpmW6hc+VyOHN//+8+Yk38kQuS1t74VZ36e6SkyHsm5Y75HmiNO"
+          crossorigin="anonymous"></script>
   <style>
     :root {
       --bg:       #131417;
@@ -151,6 +153,7 @@
       outline: none;
     }
     .season-select:hover, .season-select:focus { border-color: var(--accent); }
+    .season-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .btn-reset {
       background: transparent;
       border: 1px solid var(--border);
@@ -370,6 +373,8 @@
       .main { padding: 16px; }
       .team-grid { flex-wrap: wrap; }
       .tscard { flex: 0 0 calc(50% - 3px); min-width: 0; }
+      .sc-btn { width: 44px; height: 44px; }
+      .sc-row { height: 48px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -397,8 +402,8 @@
     <div class="toolbar">
       <div class="section-title">Schwierigkeits-Scores</div>
       <div class="section-hint" id="basis-hint">Heim &amp; Ausw&auml;rts &middot; &minus;3 bis +3 &middot; Jenks Natural Breaks</div>
-      <select class="season-select" id="filter-season"><!-- aus data/seasons.json --></select>
-      <button class="btn-reset" id="btn-reset">&#8634; Zur&uuml;cksetzen</button>
+      <select class="season-select" id="filter-season" aria-label="Saison"><!-- aus data/seasons.json --></select>
+      <button type="button" class="btn-reset" id="btn-reset">&#8634; Zur&uuml;cksetzen</button>
     </div>
     <div class="team-grid" id="team-grid">
       <div class="state-msg">LADE&hellip;</div>
@@ -478,11 +483,9 @@ async function loadSeason() {
     (LIGA === '1' ? 'Bundesliga ' : '2. Bundesliga ') + seasonLabel(season);
 
   try {
-    const [dataRes, mdRes] = await Promise.all([
-      fetch(DATA_FILE), fetch(MATCHDAYS_FILE)
+    [rawData, matchdaysData] = await Promise.all([
+      fetchJson(DATA_FILE), fetchJson(MATCHDAYS_FILE)
     ]);
-    rawData = await dataRes.json();
-    matchdaysData = await mdRes.json();
 
     computeBase();
     // Die Basis wird bei jedem Laden neu gerechnet; aus dem Speicher kommt nur
@@ -546,23 +549,23 @@ function renderGrid() {
         <div>
           <div class="sc-row-label">Heim</div>
           <div class="sc-row">
-            <button class="sc-btn" onclick="adj('${id}','home',-1)">&#8722;</button>
+            <button type="button" class="sc-btn" aria-label="${abbr} Heimstärke verringern" onclick="adj('${id}','home',-1)">&#8722;</button>
             <input class="sc-val ${svc(hs)}" type="number" min="-3" max="3" value="${hs}"
-              data-id="${id}" data-type="home"
+              data-id="${id}" data-type="home" aria-label="${abbr} Heimstärke"
               onchange="hInp(this,'${id}','home')"
               oninput="hInp(this,'${id}','home')" />
-            <button class="sc-btn" onclick="adj('${id}','home',1)">+</button>
+            <button type="button" class="sc-btn" aria-label="${abbr} Heimstärke erhöhen" onclick="adj('${id}','home',1)">+</button>
           </div>
         </div>
         <div>
           <div class="sc-row-label">Ausw.</div>
           <div class="sc-row">
-            <button class="sc-btn" onclick="adj('${id}','away',-1)">&#8722;</button>
+            <button type="button" class="sc-btn" aria-label="${abbr} Auswärtsstärke verringern" onclick="adj('${id}','away',-1)">&#8722;</button>
             <input class="sc-val ${svc(as)}" type="number" min="-3" max="3" value="${as}"
-              data-id="${id}" data-type="away"
+              data-id="${id}" data-type="away" aria-label="${abbr} Auswärtsstärke"
               onchange="hInp(this,'${id}','away')"
               oninput="hInp(this,'${id}','away')" />
-            <button class="sc-btn" onclick="adj('${id}','away',1)">+</button>
+            <button type="button" class="sc-btn" aria-label="${abbr} Auswärtsstärke erhöhen" onclick="adj('${id}','away',1)">+</button>
           </div>
         </div>
       </div>
@@ -706,7 +709,10 @@ function renderTable(matchdaysData) {
   renderStandings(matchdaysData, 'away',  'standings-away');
 }
 
-boot();
+boot().catch(e => {
+  document.getElementById('team-grid').innerHTML =
+    `<div class="state-msg">FEHLER: ${e.message}</div>`;
+});
 </script>
 </body>
 </html>

@@ -18,14 +18,11 @@ Vier Sorten Test:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.paths import LEGACY_DIR, MANUAL, PROCESSED  # noqa: E402
 from src.model.player_features import (  # noqa: E402
@@ -33,10 +30,10 @@ from src.model.player_features import (  # noqa: E402
     tm_je_spieler,
 )
 from src.model.player_model import (  # noqa: E402
-    BL2_GEWICHT, DELTA, K_MINJE, K_MIX, K_TW, KAPPA_BL2, MIN_EINSAETZE_ZIEL,
-    MIN_TRAIN, MIN_ZIEL, ROLLEN, TW, _auc, _kappa, backtest_p90, baseline_fit,
+    DELTA, K_MINJE, K_MIX, KAPPA_BL2, MIN_EINSAETZE_ZIEL,
+    MIN_ZIEL, ROLLEN, TW, _auc, _kappa, backtest_p90, baseline_fit,
     baseline_wert, kontext_tabelle, merkmalszeilen, minje_fuer, p90_mischung,
-    report_oekonomie, report_p90, report_produkt, rolle_aus_startquote,
+    report_oekonomie, rolle_aus_startquote,
     rollen_tabelle, streuung_fuer, streuungs_faktoren, team_niveaus,
     uebergaenge,
 )
@@ -45,6 +42,10 @@ from src.model.team_strength import conceded_from_panel  # noqa: E402
 
 def _hat_panel() -> bool:
     return (PROCESSED / "panel.parquet").exists()
+
+
+def _hat_tm() -> bool:
+    return (MANUAL / "tm_players.csv").exists()
 
 
 @pytest.fixture(scope="module")
@@ -77,6 +78,7 @@ def test_saisonendstand_verlaesst_das_panel(panel: pd.DataFrame) -> None:
         assert spalte not in panel.columns, f"{spalte} ist noch da"
 
 
+@pytest.mark.skipif(not _hat_tm(), reason="tm_players.csv ist nicht Teil des Repos")
 def test_merkmale_ignorieren_die_zielsaison(panel: pd.DataFrame) -> None:
     """Die Zielsaison in der Historie darf die Merkmale nicht beruehren.
 
@@ -286,6 +288,7 @@ def test_rollenkenntnis_ist_der_groesste_hebel(bt: pd.DataFrame) -> None:
     assert _r(orakel) > 0.74
 
 
+@pytest.mark.skipif(not _hat_tm(), reason="tm_players.csv ist nicht Teil des Repos")
 def test_rollentabelle_ist_eng_und_positionsabhaengig(panel: pd.DataFrame) -> None:
     """Die Einsatzlaenge haengt an Rolle und Position, und zwar praezise.
 
@@ -528,8 +531,8 @@ def test_export_ist_vollstaendig_und_stimmig(tmp_path: Path) -> None:
     Modell ja nicht. Sie sind zugleich ein Drittel des Kaders und zogen jede
     ueber alle gemittelte Kennzahl nach unten.
     """
-    if not _hat_panel() or not (LEGACY_DIR / "ratings.json").exists():
-        pytest.skip("panel.parquet oder ratings.json fehlt")
+    if not _hat_panel() or not _hat_tm() or not (LEGACY_DIR / "ratings.json").exists():
+        pytest.skip("panel.parquet, tm_players.csv oder ratings.json fehlt")
     from src.model.player_model import export
 
     payload = export(tmp_path / "player_projections.json")
@@ -592,8 +595,8 @@ def test_kategorie_beruehrt_nur_die_rolle(tmp_path: Path, monkeypatch) -> None:
     ausweisen - sonst laesst sich auf der Seite nicht unterscheiden, was
     gemessen und was gepflegt ist.
     """
-    if not _hat_panel() or not (LEGACY_DIR / "ratings.json").exists():
-        pytest.skip("panel.parquet oder ratings.json fehlt")
+    if not _hat_panel() or not _hat_tm() or not (LEGACY_DIR / "ratings.json").exists():
+        pytest.skip("panel.parquet, tm_players.csv oder ratings.json fehlt")
     from src.model.player_model import export
 
     payload = export(tmp_path / "a.json")

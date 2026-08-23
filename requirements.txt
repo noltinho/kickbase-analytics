@@ -1,0 +1,2 @@
+-r kbxp/requirements.txt
+-e ./kbxp

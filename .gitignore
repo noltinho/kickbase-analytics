@@ -3,13 +3,18 @@
 
 # Python
 venv/
+.venv/
 __pycache__/
+*.egg-info/
+.coverage
+.pytest_cache/
 
 # IDE / Werkzeug-Konfiguration
 .vs/
 .vscode/
 .claude/
 .agents/
+node_modules/
 
 # Backups
 backup_*/

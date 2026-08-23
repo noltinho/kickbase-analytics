@@ -25,6 +25,24 @@ Walk-forward ueber die Zielsaisons 2019-2025 (Ziel: Ø Punkte je Einsatz):
     Fall c  n=282   r 0,544  MAE 18,1  Verzerrung +0,8
     alle    n=1571  r 0,689  MAE 16,6  Verzerrung +1,4
 
+Liga 2 verwendet dieselbe fachliche Struktur, fittet ihr Niveau und ihre
+Koeffizienten aber ausschliesslich auf Zweitliga-Zeilen. Das Panel beginnt
+dort 2021/22; der ehrliche Walk-forward umfasst deshalb die Zielsaisons
+2023-2025:
+
+    Fall a  n=317   r 0,591  MAE 16,2  Verzerrung +1,2
+    Fall b  n=151   r 0,340  MAE 16,3  Verzerrung -1,6
+    Fall c  n=179   r 0,327  MAE 16,2  Verzerrung -0,2
+    alle    n=647   r 0,529  MAE 16,2  Verzerrung +0,1
+
+Anders als Liga 1 besitzt Liga 2 keine handgepflegten Kategorien. Eine kleine
+vorgeschaltete Logistik ordnet deshalb nur die Zielgruppe, nicht ihre Punkte:
+aus Vorsaison-Starts, -Einsaetzen, Alter und relativem Kader-Marktwert werden
+die besten acht je Verein gewaehlt. Walk-forward 2022-2025 wurden 64,2 % von
+ihnen tatsaechlich Starter (Recall 42,5 %). Acht je Verein entsprechen im
+Umfang exakt den 144 manuell gepflegten Liga-1-Kandidaten; eine ligaweite
+Schwelle wurde verworfen, weil sie kleine Vereine fast leer liess.
+
 Die t-Werte zaehlen die **Saison** als unabhaengige Einheit, nicht die Zeile —
 die Spieler einer Saison teilen sich ihr Kohortenglueck. Ohne den Versatz
 (``versatz_tabelle``) stuende Fall b bei +5,3 mit t = 2,4, also als einzige
@@ -161,21 +179,22 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from sklearn.linear_model import LogisticRegression
 
 from src.model.player_features import (  # noqa: E402
     lade_panel, lade_tm, start_kennzahlen, team_niveaus, tm_je_spieler)
 from src.model.team_strength import conceded_from_panel  # noqa: E402
-from src.paths import LEGACY_DIR, MANUAL, PROCESSED  # noqa: E402
+from src.paths import LEGACY_DIR, MANUAL, PROCESSED, atomic_write_json  # noqa: E402
 
-LIGA1 = "Bundesliga"
+LIGEN = {"1": "Bundesliga", "2": "2. Bundesliga"}
+LIGA_IDS = {v: k for k, v in LIGEN.items()}
+LIGA1 = LIGEN["1"]
+LIGA2 = LIGEN["2"]
 
 # Der Starter-Filter. Er entscheidet, wer ins Training kommt und wer als
 # "Rolle gehalten" gilt: 2.842 Spielersaisons in Liga 1 bestehen ihn.
@@ -249,6 +268,29 @@ PFLICHT = {"a": ["a1"], "b": [], "c": []}
 # Traegt die Punktgroesse in scatter.html; wer eine kleinere Zahl sehen will,
 # muss sie erst messen.
 STREUUNG = {"a": 16.4, "b": 15.9, "c": 18.1}
+STREUUNG_LIGA = {
+    "1": STREUUNG,
+    # Walk-forward 2023-2025. Die Zweitliga-Stichprobe ist kuerzer, deshalb
+    # werden die Werte bewusst nur auf eine Nachkommastelle als Groessenordnung
+    # und nicht als scheinbar praezises Konfidenzintervall exportiert.
+    "2": {"a": 16.2, "b": 16.3, "c": 16.2},
+}
+
+# Liga 2 hat keine handgepflegte Rollenliste. Die bedingte Punkteprognose darf
+# aber nicht still dem ganzen Kader unterstellen, er spiele eine normale Saison
+# als Gesetzter. Deshalb steht davor ein eigener, strikt vor Saisonbeginn
+# beobachtbarer Auswahlkanal. Die besten acht je Verein entsprechen im Umfang
+# den 144 handgepflegten Liga-1-Kategorien 1-2. Im Walk-forward 2022-2025
+# wurden 64,1 % davon tatsaechlich Starter; ein Teil der uebrigen Faelle sind
+# Verletzungen und damit fuer die Annahme "gesund und gesetzt" keine echten
+# Fehlklassifikationen. Eine ligaweite Wahrscheinlichkeitsschwelle waere sachlich
+# falsch: sie liess kleine Vereine fast leer und grosse Vereine uebervoll.
+STARTER_JE_TEAM = 8
+STARTER_KATEGORIE_1_JE_TEAM = 4
+STARTER_MERKMALE = (
+    "prev_starts", "prev_apps", "had_prev", "mw_team_pct",
+    "mw_liga_z", "alter", "age2",
+)
 
 # Ueber so viele Saisons wird der ligaweite Positionsaufschlag gemittelt. Das
 # Niveau einer einzelnen Saison ist verrauscht (ZM schwankt zwischen 74 und
@@ -405,7 +447,8 @@ def je_spielersaison(sk: pd.DataFrame) -> pd.DataFrame:
 # Teamstaerke
 # ---------------------------------------------------------------------------
 
-def kader_marktwerte(tm: pd.DataFrame, panel: pd.DataFrame) -> pd.DataFrame:
+def kader_marktwerte(tm: pd.DataFrame, panel: pd.DataFrame,
+                     liga: str = "1") -> pd.DataFrame:
     """Kader-Marktwert je Verein und Saison, uebersetzt auf die Kickbase-team_id.
 
     Die Bruecke laeuft ueber die Spieler, nicht ueber eine gepflegte
@@ -424,7 +467,7 @@ def kader_marktwerte(tm: pd.DataFrame, panel: pd.DataFrame) -> pd.DataFrame:
              .agg(mw=("mw_vor_saison", "sum"), liga=("liga", "first")))
     kad = kad.merge(bruecke[["season", "verein", "team_id"]],
                     on=["season", "verein"])
-    kad = kad[kad.liga == 1].copy()
+    kad = kad[kad.liga == int(liga)].copy()
     kad["j"] = _jahr(kad.season)
     kad["log_mw"] = np.log(kad.mw.where(kad.mw > 0))
     kad["z_mw"] = kad.groupby("j").log_mw.transform(
@@ -432,7 +475,9 @@ def kader_marktwerte(tm: pd.DataFrame, panel: pd.DataFrame) -> pd.DataFrame:
     return kad[["j", "season", "team_id", "verein", "z_mw"]]
 
 
-def teamstaerke_tabelle(panel: pd.DataFrame, tm: pd.DataFrame) -> pd.DataFrame:
+def teamstaerke_tabelle(panel: pd.DataFrame, tm: pd.DataFrame,
+                        league: str = LIGA1,
+                        liga: str = "1") -> pd.DataFrame:
     """Je (Saison, Team) das gemessene Angriffsniveau und seine Vorhersager.
 
     ``z_att`` ist die gegnerbereinigte, innerhalb der Saison standardisierte
@@ -443,9 +488,9 @@ def teamstaerke_tabelle(panel: pd.DataFrame, tm: pd.DataFrame) -> pd.DataFrame:
     matches = pd.read_parquet(PROCESSED / "matches.parquet")
     niv = team_niveaus(conceded_from_panel(panel, matches))
     niv["j"] = _jahr(niv.season)
-    nz = niv[niv.league == LIGA1][["j", "team_id", "z_att"]]
+    nz = niv[niv.league == league][["j", "team_id", "z_att"]]
 
-    kad = kader_marktwerte(tm, panel)
+    kad = kader_marktwerte(tm, panel, liga)
     vor = nz.rename(columns={"z_att": "z_prev"}).assign(j=lambda d: d.j + 1)
     tab = (kad.merge(nz, on=["j", "team_id"], how="left")
               .merge(vor, on=["j", "team_id"], how="left"))
@@ -467,7 +512,7 @@ def z_hat_fuer(tab: pd.DataFrame, j_ziel: int) -> dict:
     """
     tr = tab[(tab.j < j_ziel) & tab.z_att.notna()]
     zt = tab[tab.j == j_ziel]
-    if len(tr) < 20 or not len(zt):
+    if len(tr) < 15 or not len(zt):
         return {}
     coef = _wols(tr[Z_MERKMALE].fillna(0.0).values, tr.z_att.values)
     return dict(zip(zt.team_id, _pred(coef, zt[Z_MERKMALE].fillna(0.0).values)))
@@ -514,15 +559,16 @@ def z_hat_zielsaison(tab: pd.DataFrame, j_ziel: int, liga: str = "1") -> dict:
 # ---------------------------------------------------------------------------
 
 def historie(ss: pd.DataFrame, j_ziel: int, delta: float = DELTA,
-             fenster: int = FENSTER) -> pd.DataFrame:
-    """Einsatzgewichteter Startelfschnitt der letzten Saisons, nur Liga 1.
+             fenster: int = FENSTER, league: str = LIGA1) -> pd.DataFrame:
+    """Einsatzgewichteter Startelfschnitt der letzten Saisons derselben Liga.
 
     Gemessen: nur Vorsaison r 0,717, einsatzgewichtet ueber drei Saisons mit
     delta 0,7 dann 0,740. Das Gewicht zaehlt doppelt — nach Aktualitaet und
     nach Zahl der Startelfeinsaetze —, weil eine halbe Saison eben eine halbe
     Aussage ist.
     """
-    h = ss[(ss.league == LIGA1) & (ss.j < j_ziel) & (ss.j >= j_ziel - fenster)]
+    h = ss[(ss.league == league) & (ss.j < j_ziel)
+           & (ss.j >= j_ziel - fenster)]
     h = h.dropna(subset=["avg_start"])
     if not len(h):
         return pd.DataFrame({"player_id": [], "a1": [], "gewicht": []})
@@ -543,7 +589,7 @@ def historie_kontext(dat: "Daten", j_ziel: int, delta: float = DELTA,
     Modelle eine Veraenderung zur Zielsaison statt zwei absolute Niveaus
     vergleichen koennen.
     """
-    h = dat.ss[(dat.ss.league == LIGA1) & (dat.ss.j < j_ziel)
+    h = dat.ss[(dat.ss.league == dat.league) & (dat.ss.j < j_ziel)
                & (dat.ss.j >= j_ziel - fenster) & dat.ss.avg_start.notna()].copy()
     if not len(h):
         return pd.DataFrame(columns=["player_id", "hist_z", "hist_mw"])
@@ -570,10 +616,19 @@ class Daten:
     """Alles, was Backtest und Export gemeinsam brauchen — einmal geladen."""
 
     def __init__(self, min_starts: int = MIN_STARTS,
-                 min_minuten: float = 0.0):
+                 min_minuten: float = 0.0, liga: str = "1"):
+        if liga not in LIGEN:
+            raise ValueError(f"Unbekannte Liga {liga!r}; erwartet 1 oder 2")
+        self.liga = liga
+        self.league = LIGEN[liga]
         self.panel = lade_panel()
         self.tm = lade_tm()
         fein, grob = positions_quelle()
+        # Die Kaderpflege beschreibt ausschliesslich die aktuelle Bundesliga.
+        # Fuer historische Zweitliga-Folds waere ihre rueckwirkende Anwendung
+        # Zukunftswissen; dort gilt deshalb konsequent die saisonale TM-Position.
+        if liga == "2":
+            fein = {}
 
         sk = start_kennzahlen(self.panel)
         sk["j"] = _jahr(sk.season)
@@ -588,17 +643,23 @@ class Daten:
         tmj = tm_je_spieler(self.tm)[["player_id", "season", "log2_mw", "alter"]]
         self.ss = ss.merge(tmj, on=["player_id", "season"], how="left")
 
-        self.zellen = zell_tabellen(sk.merge(
-            tmj, on=["player_id", "season"], how="left"))
-        self.team = teamstaerke_tabelle(self.panel, self.tm)
+        self.zellen = zell_tabellen(
+            sk.merge(tmj, on=["player_id", "season"], how="left"),
+            self.league)
+        self.team = teamstaerke_tabelle(
+            self.panel, self.tm, self.league, self.liga)
         self.zielsaison = str(self.panel.season.max())
         self.j_ziel = _jahr(self.zielsaison)
+        erste_ligasaison = int(self.ss.loc[
+            self.ss.league == self.league, "j"].min())
+        self.erste_zielsaison = max(ERSTE_ZIELSAISON, erste_ligasaison + 1)
         self._zh: dict[int, dict] = {}
 
     def z_hat(self, j: int) -> dict:
         """Teamstaerke-Prognose je Zielsaison, gecacht — der Fit kostet sonst."""
         if j not in self._zh:
-            self._zh[j] = (z_hat_zielsaison(self.team, j) if j >= self.j_ziel
+            self._zh[j] = (z_hat_zielsaison(self.team, j, self.liga)
+                           if j >= self.j_ziel
                            else z_hat_fuer(self.team, j))
         return self._zh[j]
 
@@ -610,7 +671,8 @@ class Daten:
         prognostiziert. Ein Modell, das auch Randfiguren sortieren muss, misst
         eine Frage, die beim Kaderbau niemand stellt.
         """
-        z = self.ss[(self.ss.j == j) & (self.ss.league == LIGA1) & self.ss.starter]
+        z = self.ss[(self.ss.j == j) & (self.ss.league == self.league)
+                    & self.ss.starter]
         return z.dropna(subset=["avg_alle"]).copy()
 
 
@@ -623,7 +685,7 @@ class Daten:
 # Position zuletzt geholt haben
 # ---------------------------------------------------------------------------
 
-def zell_tabellen(sk_team: pd.DataFrame) -> dict:
+def zell_tabellen(sk_team: pd.DataFrame, league: str = LIGA1) -> dict:
     """Zellen der Vorsaison, als Abweichung vom Ligamittel ihrer Position.
 
     Warum Abweichung statt rohem Mittelwert: eine Zelle mischt Positionen mit
@@ -633,7 +695,7 @@ def zell_tabellen(sk_team: pd.DataFrame) -> dict:
     **Zielposition** gibt jedem seinen eigenen Sockel. Auf der feinsten Stufe
     — Verein und Position — ist beides dasselbe.
     """
-    s = sk_team[sk_team.starter & (sk_team.league == LIGA1)]
+    s = sk_team[sk_team.starter & (sk_team.league == league)]
     s = s.dropna(subset=["pos", "avg_start"])
     s = s.assign(teil=s.pos.map(TEIL))
 
@@ -745,12 +807,12 @@ def merkmalszeilen(dat: Daten, j_ziel: int, kandidaten: pd.DataFrame,
     Information der Zielsaison, und sie ist vor dem ersten Spieltag bekannt.
     """
     df = kandidaten.copy()
-    df = df.merge(historie(dat.ss, j_ziel, delta, fenster),
+    df = df.merge(historie(dat.ss, j_ziel, delta, fenster, dat.league),
                   on="player_id", how="left")
     df = df.merge(historie_kontext(dat, j_ziel, delta, fenster),
                   on="player_id", how="left")
 
-    fenster = dat.ss[(dat.ss.league == LIGA1) & (dat.ss.j < j_ziel)
+    fenster = dat.ss[(dat.ss.league == dat.league) & (dat.ss.j < j_ziel)
                      & (dat.ss.j >= j_ziel - RUECKBLICK) & dat.ss.starter]
     war_starter = set(fenster.player_id)
     hatte_saison = set(dat.ss[dat.ss.j == j_ziel - 1].player_id)
@@ -901,7 +963,7 @@ def zeilen_aller_saisons(dat: Daten, delta: float = DELTA,
                          fenster: int = FENSTER) -> pd.DataFrame:
     """Merkmalszeilen fuer jede Zielsaison, die eine Vorsaison hat."""
     teile = []
-    for j in range(ERSTE_ZIELSAISON, dat.j_ziel):
+    for j in range(dat.erste_zielsaison, dat.j_ziel):
         zg = dat.zielgruppe(j)
         if not len(zg):
             continue
@@ -995,7 +1057,7 @@ def prognosen_kalibrieren(rows: pd.DataFrame, roh: pd.Series,
 
 
 def backtest(dat: Daten, delta: float = DELTA, fenster: int = FENSTER,
-             rho: float = RHO, ab: int = ERSTE_ZIELSAISON + 3,
+             rho: float = RHO, ab: int | None = None,
              mit_versatz: bool = True,
              mit_segmente: bool = True) -> pd.DataFrame:
     """Je Zielsaison neu anpassen, nur auf frueheren Saisons. Kein Blick nach vorn.
@@ -1006,6 +1068,9 @@ def backtest(dat: Daten, delta: float = DELTA, fenster: int = FENSTER,
     gibt erst ab ``ab`` etwas zurueck — die frueheren Faltungen werden
     gebraucht, um den Versatz ueberhaupt schaetzen zu koennen.
     """
+    if ab is None:
+        ab = (ERSTE_ZIELSAISON + 3 if dat.liga == "1"
+              else dat.erste_zielsaison + 1)
     D = zeilen_aller_saisons(dat, delta, fenster)
     frueh, aus = [], []
     for j in sorted(D.j.unique()):
@@ -1113,34 +1178,174 @@ def verletzte() -> set:
     return aus
 
 
+def starter_merkmalszeilen(dat: Daten, j_ziel: int,
+                            rows: pd.DataFrame) -> pd.DataFrame:
+    """Ex-ante-Merkmale fuer die automatische Zweitliga-Zielgruppe.
+
+    Die Zielvariable des Punkte-Modells bleibt *bedingt auf eine gesetzte
+    Saison*. Diese kleine vorgeschaltete Logistik beantwortet nur, fuer wen
+    diese Bedingung plausibel ist. Eigene Historie darf aus beiden Ligen
+    kommen; Marktwert-Rang und -Niveau werden innerhalb des aktuellen
+    Zweitliga-Kaders gebildet und sind deshalb ueber Saisons vergleichbar.
+    """
+    df = rows.copy()
+    h = dat.ss[(dat.ss.j < j_ziel) & (dat.ss.j >= j_ziel - RUECKBLICK)]
+    agg = h.groupby("player_id", as_index=False).agg(
+        prev_starts=("n_start", "max"), prev_apps=("n_einsaetze", "max"))
+    df = df.merge(agg, on="player_id", how="left")
+    df["had_prev"] = df.player_id.isin(set(h.player_id)).astype(float)
+    df["mw_team_pct"] = df.groupby("team_id").log2_mw.rank(
+        pct=True, ascending=True)
+    sd = float(df.log2_mw.std())
+    df["mw_liga_z"] = ((df.log2_mw - float(df.log2_mw.mean())) / sd
+                       if np.isfinite(sd) and sd > 1e-9 else 0.0)
+    df["age2"] = ((df.alter - 25.0) / 10.0) ** 2
+    return df
+
+
+def starter_trainingsdaten(dat: Daten) -> pd.DataFrame:
+    """Historische Zweitliga-Kader mit ex-ante Merkmalen und Starter-Ziel."""
+    if hasattr(dat, "_starter_trainingsdaten"):
+        return dat._starter_trainingsdaten
+    teile = []
+    for j in sorted(dat.ss.loc[
+            (dat.ss.league == dat.league) & (dat.ss.j < dat.j_ziel), "j"].unique()):
+        ziel = dat.ss[(dat.ss.league == dat.league) & (dat.ss.j == j)][
+            ["player_id", "season", "team_id", "starter"]].copy()
+        if not len(ziel):
+            continue
+        tm = dat.tm[(dat.tm.liga == int(dat.liga))
+                    & (dat.tm.season == ziel.season.iloc[0])
+                    & dat.tm.player_id.notna()].drop_duplicates("player_id")
+        ziel = ziel.merge(tm[["player_id", "log2_mw", "alter"]],
+                          on="player_id", how="left")
+        z = starter_merkmalszeilen(dat, int(j), ziel)
+        z["j"] = int(j)
+        teile.append(z)
+    if not teile:
+        raise ValueError(f"Keine Trainingssaisons fuer {dat.league}")
+    dat._starter_trainingsdaten = pd.concat(teile, ignore_index=True)
+    return dat._starter_trainingsdaten
+
+
+def _starter_anpassen(train: pd.DataFrame) -> dict:
+    """Die kleine regularisierte Logistik auf bereits gebauten Zeilen."""
+    mittel = {m: float(train[m].median()) if train[m].notna().any() else 0.0
+              for m in STARTER_MERKMALE}
+    X = train[list(STARTER_MERKMALE)].fillna(mittel).values
+    modell = LogisticRegression(C=0.3, max_iter=1000).fit(
+        X, train.starter.astype(int).values)
+    return {"modell": modell, "mittel": mittel, "n": int(len(train)),
+            "saisons": sorted(int(x) for x in train.j.unique())}
+
+
+def starter_fit(dat: Daten) -> dict:
+    """Auswahlmodell fuer Liga 2 auf allen abgeschlossenen Saisons fitten."""
+    if hasattr(dat, "_starter_fit"):
+        return dat._starter_fit
+    fit = _starter_anpassen(starter_trainingsdaten(dat))
+    dat._starter_fit = fit
+    return fit
+
+
+def starter_wahrscheinlichkeit(dat: Daten, rows: pd.DataFrame) -> tuple[pd.Series, dict]:
+    """Wahrscheinlichkeit einer normalen Saison als Gesetzter, Liga 2."""
+    fit = starter_fit(dat)
+    m = starter_merkmalszeilen(dat, dat.j_ziel, rows)
+    X = m[list(STARTER_MERKMALE)].fillna(fit["mittel"]).values
+    p = pd.Series(fit["modell"].predict_proba(X)[:, 1], index=rows.index)
+    return p, fit
+
+
+def starter_backtest(dat: Daten) -> pd.DataFrame:
+    """Walk-forward der automatischen Zielgruppe, immer acht je Verein."""
+    D = starter_trainingsdaten(dat)
+    aus = []
+    for j in sorted(D.j.unique())[1:]:
+        tr, te = D[D.j < j], D[D.j == j].copy()
+        if not len(tr) or not len(te):
+            continue
+        fit = _starter_anpassen(tr)
+        X = te[list(STARTER_MERKMALE)].fillna(fit["mittel"]).values
+        te["starter_wahrscheinlichkeit"] = fit["modell"].predict_proba(X)[:, 1]
+        rang = te.groupby("team_id").starter_wahrscheinlichkeit.rank(
+            ascending=False, method="first")
+        te["ausgewaehlt"] = rang <= STARTER_JE_TEAM
+        te["kategorie"] = np.where(rang <= STARTER_KATEGORIE_1_JE_TEAM, 1, 2)
+        aus.append(te)
+    return pd.concat(aus, ignore_index=True)
+
+
+def report_starterauswahl(bt: pd.DataFrame) -> None:
+    """Trefferquote der ex-ante Zweitliga-Auswahl, getrennt vom Punktemodell."""
+    print()
+    print(f"Starter-Auswahl, beste {STARTER_JE_TEAM} je Verein")
+    print("  Saison  n    Praezision  Recall")
+    for j, s in bt.groupby("j"):
+        w = s[s.ausgewaehlt]
+        praezision = float(w.starter.mean())
+        recall = float(s.loc[s.starter, "ausgewaehlt"].mean())
+        print(f"  {int(j)}  {int(w.ausgewaehlt.sum()):<4d} "
+              f"{praezision:9.3f}  {recall:.3f}")
+    w = bt[bt.ausgewaehlt]
+    print(f"  alle  {int(w.ausgewaehlt.sum()):<4d} "
+          f"{float(w.starter.mean()):9.3f}  "
+          f"{float(bt.loc[bt.starter, 'ausgewaehlt'].mean()):.3f}")
+
+
 def kandidaten(dat: Daten, kategorien=(1, 2)) -> pd.DataFrame:
     """Die Spieler der Zielsaison, fuer die eine Zahl entstehen soll.
 
-    Verein und Marktwert kommen aus ``data/data_1.json``, nicht aus dem Panel:
+    Verein und Marktwert kommen aus ``data/data_{liga}.json``, nicht aus dem Panel:
     Neuzugaenge stehen dort noch nicht (30 von 441 haetten keine team_id). Das
     Kuerzel in ``team_name`` ist bereits dasselbe wie ``verein`` in der
     Kaderpflege.
+
+    Liga 1 behaelt die handgepflegte Kategorie und Feinposition. Fuer Liga 2
+    kommt die Feinposition aus dem ligaeigenen TM-Kader; die Kategorien 1/2
+    entstehen reproduzierbar aus der vorgeschalteten Starter-Logistik.
     """
-    d1 = json.loads((LEGACY_DIR / "data_1.json").read_text(encoding="utf-8"))
+    d1 = json.loads((LEGACY_DIR / f"data_{dat.liga}.json").read_text(
+        encoding="utf-8"))
     kb = pd.DataFrame([{
         "player_id": int(p["id"]), "name": p["name"],
         "team_id": str(p["team_id"]), "verein": p.get("team_name"),
+        "position_kb": p.get("position"),
         "kb_mw": (p.get("market_value") or {}).get("current"),
     } for p in d1["players"]])
 
-    fp = pd.read_csv(MANUAL / "fine_positions.csv")
-    fp = fp[fp.player_id.notna()].copy()
-    fp["player_id"] = fp.player_id.astype("int64")
-    k = kb.merge(fp[["player_id", "position_fine", "kategorie"]], on="player_id")
-    k = k[k.kategorie.isin(kategorien)].rename(columns={"position_fine": "pos"})
-
-    tmj = tm_je_spieler(dat.tm)
-    tmj = tmj[tmj.season == dat.zielsaison][["player_id", "log2_mw", "alter"]]
-    k = k.merge(tmj, on="player_id", how="left")
+    tmj = dat.tm[(dat.tm.season == dat.zielsaison)
+                 & (dat.tm.liga == int(dat.liga))
+                 & dat.tm.player_id.notna()].drop_duplicates("player_id")
+    k = kb.merge(tmj[["player_id", "position_fine", "log2_mw", "alter"]],
+                 on="player_id", how="left")
     # Rueckfall auf den Kickbase-Marktwert: beide sind Euro, der Log macht den
     # Rest. Ohne ihn verloeren Spieler ohne TM-Stichtagswert ihr zweitstaerkstes
     # Merkmal.
     k["log2_mw"] = k.log2_mw.fillna(np.log2(k.kb_mw.where(k.kb_mw > 0)))
+
+    if dat.liga == "1":
+        fp = pd.read_csv(MANUAL / "fine_positions.csv")
+        fp = fp[fp.player_id.notna()].copy()
+        fp["player_id"] = fp.player_id.astype("int64")
+        k = k.drop(columns=["position_fine"]).merge(
+            fp[["player_id", "position_fine", "kategorie"]], on="player_id")
+        k = k[k.kategorie.isin(kategorien)]
+        k["starter_wahrscheinlichkeit"] = np.nan
+    else:
+        # Nur vier aktuelle Spieler fehlen in der TM-Bruecke. Ihre grobe
+        # Kickbase-Position ist ehrlicher als ein stiller Ausschluss.
+        grob = {1: "TW", 2: "IV", 3: "ZM", 4: "ST"}
+        k["position_fine"] = k.position_fine.fillna(k.position_kb.map(grob))
+        p, _ = starter_wahrscheinlichkeit(dat, k)
+        k["starter_wahrscheinlichkeit"] = p
+        rang = k.groupby("team_id").starter_wahrscheinlichkeit.rank(
+            ascending=False, method="first")
+        k["kategorie"] = np.where(rang <= STARTER_KATEGORIE_1_JE_TEAM, 1, 2)
+        k = k[rang <= STARTER_JE_TEAM]
+        k = k[k.kategorie.isin(kategorien)]
+
+    k = k.rename(columns={"position_fine": "pos"})
     return k.reset_index(drop=True)
 
 
@@ -1149,27 +1354,28 @@ def _zahl(x):
     return None if x is None or not np.isfinite(x) else float(x)
 
 
-def export(path: Path | None = None, kategorien=(1, 2)) -> dict:
-    """data/player_projections_avg.json schreiben."""
-    dat = Daten()
+def export(path: Path | None = None, kategorien=(1, 2),
+           liga: str = "1") -> dict:
+    """Fallweise Spielerprognose fuer Liga 1 oder 2 schreiben."""
+    dat = Daten(liga=liga)
     fits = anpassen(zeilen_aller_saisons(dat), dat.j_ziel)
     # Derselbe Versatz wie im Backtest, aus denselben Out-of-fold-Resten. Er
     # kostet einen vollen Walk-forward — der laeuft in Sekunden, und die
     # Alternative waere eine Konstante im Code, die still veraltet.
-    oof = backtest(dat, mit_versatz=False, ab=ERSTE_ZIELSAISON)
+    oof = backtest(dat, mit_versatz=False, ab=dat.erste_zielsaison)
     kal = kalibrierung_tabelle(oof)
     vers = kal["versatz"]
 
     rows = merkmalszeilen(dat, dat.j_ziel, kandidaten(dat, kategorien))
     rows["xp"] = prognosen_kalibrieren(
-        rows, vorhersagen(fits, rows), kal, mit_segmente=True)
+        rows, vorhersagen(fits, rows), kal, mit_segmente=dat.liga == "1")
     krank = verletzte()
 
     spieler = {}
     for r in rows.itertuples():
         if not np.isfinite(r.xp):
             continue
-        streuung = STREUUNG.get(r.fall, 20.0)
+        streuung = STREUUNG_LIGA[dat.liga].get(r.fall, 20.0)
         spieler[str(r.player_id)] = {
             "name": r.name, "team_id": r.team_id, "verein": r.verein,
             "pos": r.pos, "teil": r.teil, "kategorie": int(r.kategorie),
@@ -1190,13 +1396,16 @@ def export(path: Path | None = None, kategorien=(1, 2)) -> dict:
             "streuung": streuung,
             "sicherheit": round(max(0.05, 1.0 - streuung / 30.0), 3),
             "verletzt": int(r.player_id) in krank,
+            "starter_wahrscheinlichkeit": (
+                None if _zahl(r.starter_wahrscheinlichkeit) is None
+                else round(float(r.starter_wahrscheinlichkeit), 3)),
         }
 
     out = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "model": "avg-je-einsatz-fallweise",
         "season": dat.zielsaison,
-        "liga": "1",
+        "liga": dat.liga,
         "params": {
             "min_starts": MIN_STARTS,
             "delta": DELTA, "fenster": FENSTER, "rho": RHO,
@@ -1209,6 +1418,16 @@ def export(path: Path | None = None, kategorien=(1, 2)) -> dict:
                 "n_saisons": kal["n_saisons"],
             },
             "teile": {"referenz": TEIL_REF, "uebrige": list(TEILE)},
+            "auswahl": ({
+                "typ": "manuelle-kategorien",
+            } if dat.liga == "1" else {
+                "typ": "starter-logistik",
+                "je_team": STARTER_JE_TEAM,
+                "kategorie_1_je_team": STARTER_KATEGORIE_1_JE_TEAM,
+                "merkmale": list(STARTER_MERKMALE),
+                "n": starter_fit(dat)["n"],
+                "saisons": starter_fit(dat)["saisons"],
+            }),
             "koeffizienten": {
                 "merkmale": ["const"] + fits["spalten"],
                 "werte": [round(float(x), 3) for x in fits["coef"]],
@@ -1218,9 +1437,10 @@ def export(path: Path | None = None, kategorien=(1, 2)) -> dict:
         "kategorien": list(kategorien),
         "players": spieler,
     }
-    ziel = path or (LEGACY_DIR / "player_projections_avg.json")
-    ziel.write_text(json.dumps(out, ensure_ascii=False, indent=1),
-                    encoding="utf-8")
+    datei = ("player_projections_avg.json" if dat.liga == "1"
+             else f"player_projections_avg_{dat.liga}.json")
+    ziel = path or (LEGACY_DIR / datei)
+    atomic_write_json(ziel, out)
     return out
 
 
@@ -1230,16 +1450,23 @@ def _cli() -> None:
                     help="walk-forward, aufgeschluesselt nach Fall und Teil")
     ap.add_argument("--gitter", action="store_true",
                     help="delta, fenster und rho gegeneinander messen")
+    ap.add_argument("--liga", choices=sorted(LIGEN), default="1",
+                    help="Liga 1 oder 2 (Standard: 1)")
     args = ap.parse_args()
 
     if args.gitter:
-        gitter(Daten())
+        gitter(Daten(liga=args.liga))
     elif args.backtest:
-        report(backtest(Daten()))
+        dat = Daten(liga=args.liga)
+        report(backtest(dat))
+        if args.liga == "2":
+            report_starterauswahl(starter_backtest(dat))
     else:
-        out = export()
+        out = export(liga=args.liga)
+        datei = ("player_projections_avg.json" if args.liga == "1"
+                 else f"player_projections_avg_{args.liga}.json")
         print(f"{len(out['players'])} Spieler nach "
-              f"{LEGACY_DIR / 'player_projections_avg.json'}  ({out['faelle']})")
+              f"{LEGACY_DIR / datei}  ({out['faelle']})")
 
 
 if __name__ == "__main__":

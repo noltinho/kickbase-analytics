@@ -16,22 +16,19 @@ Vier Sorten Test:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from src.paths import LEGACY_DIR, MANUAL, PROCESSED  # noqa: E402
 from src.model.player_avg import (  # noqa: E402
-    ERSTE_ZIELSAISON, FENSTER, LIGA1, MERKMALE, MIN_STARTS, PFLICHT, RHO,
-    SPITZE_MW, TEIL, TEILE, TEIL_REF, Daten, _corr, anpassen,
-    backtest, export, historie, kandidaten, merkmalszeilen, position_von,
-    positions_quelle, vorhersagen, z_hat_fuer, z_hat_skala,
-    zeilen_aller_saisons,
+    ERSTE_ZIELSAISON, FENSTER, LIGA1, LIGA2, MERKMALE, MIN_STARTS,
+    PFLICHT, RHO, SPITZE_MW, STARTER_JE_TEAM, TEIL, TEILE, TEIL_REF,
+    Daten, _corr, anpassen, backtest, export, historie, kandidaten,
+    merkmalszeilen, position_von, positions_quelle, starter_backtest,
+    vorhersagen, z_hat_fuer, z_hat_skala, zeilen_aller_saisons,
 )
 
 
@@ -365,7 +362,7 @@ def test_export_ist_vollstaendig_und_stimmig(tmp_path: Path) -> None:
     felder = {"name", "team_id", "verein", "pos", "teil", "kategorie", "fall",
               "xp", "hist", "zelle", "stufe", "z_hat", "streuung",
               "mw_verhaeltnis", "alter_delta", "vorgaenger_n",
-              "sicherheit", "verletzt"}
+              "sicherheit", "verletzt", "starter_wahrscheinlichkeit"}
     for pid, e in P.items():
         assert set(e) == felder, pid
         assert e["kategorie"] in (1, 2)
@@ -375,6 +372,7 @@ def test_export_ist_vollstaendig_und_stimmig(tmp_path: Path) -> None:
         assert e["teil"] in (TEIL_REF,) + TEILE
         assert TEIL[e["pos"]] == e["teil"]
         assert isinstance(e["verletzt"], bool)
+        assert e["starter_wahrscheinlichkeit"] is None
         if e["fall"] == "c":
             assert e["mw_verhaeltnis"] is not None and e["mw_verhaeltnis"] > 0
             assert e["alter_delta"] is not None
@@ -494,3 +492,55 @@ def test_neuzugaenge_bleiben_unter_ihrer_zelle(bt):
     assert c.avg_alle.mean() < c.zelle.mean(), "Neuzugaenge erben ihre Zelle nicht"
     oben = c[c.zelle > c.zelle.quantile(0.8)]
     assert oben.zelle.mean() - oben.avg_alle.mean() > 20
+
+
+# ---------------------------------------------------------------------------
+# Liga 2
+# ---------------------------------------------------------------------------
+
+def test_liga2_uebernimmt_die_struktur_aber_fittet_ihr_eigenes_niveau() -> None:
+    """Die Liga-1-Erkenntnisse sind Struktur, nicht ein kopierter Koeffizientensatz."""
+    if not _vollstaendig():
+        pytest.skip("Datengrundlage fehlt")
+    dat2 = Daten(liga="2")
+    assert dat2.league == LIGA2
+    assert dat2.erste_zielsaison == 2022
+    assert set(dat2.ss.loc[dat2.ss.j == 2025, "league"]) >= {LIGA1, LIGA2}
+
+    bt2 = backtest(dat2).dropna(subset=["pred", "avg_alle"])
+    assert len(bt2) > 600
+    assert set(bt2.j.unique()) == {2023, 2024, 2025}
+    assert _corr(bt2.avg_alle, bt2.pred) > 0.48
+    assert float(np.abs(bt2.pred - bt2.avg_alle).mean()) < 17.5
+    assert abs(float((bt2.pred - bt2.avg_alle).mean())) < 2.0
+    assert set(bt2.fall) == {"a", "b", "c"}
+
+
+def test_liga2_starterauswahl_ist_walk_forward_und_je_team_begrenzt() -> None:
+    if not _vollstaendig():
+        pytest.skip("Datengrundlage fehlt")
+    bt2 = starter_backtest(Daten(liga="2"))
+    assert set(bt2.j.unique()) == {2022, 2023, 2024, 2025}
+
+    je_team = (bt2[bt2.ausgewaehlt]
+               .groupby(["j", "team_id"]).size())
+    assert (je_team == STARTER_JE_TEAM).all()
+    assert len(je_team) == 4 * 18
+    assert float(bt2.loc[bt2.ausgewaehlt, "starter"].mean()) > 0.60
+
+
+def test_liga2_export_hat_acht_kandidaten_je_team(tmp_path: Path) -> None:
+    if not _vollstaendig() or not (LEGACY_DIR / "data_2.json").exists():
+        pytest.skip("Datengrundlage fehlt")
+    ziel = tmp_path / "player_projections_avg_2.json"
+    doc = export(ziel, liga="2")
+    assert json.loads(ziel.read_text(encoding="utf-8"))["liga"] == "2"
+    assert doc["params"]["auswahl"]["typ"] == "starter-logistik"
+    assert doc["params"]["auswahl"]["je_team"] == STARTER_JE_TEAM
+    assert len(doc["players"]) == 18 * STARTER_JE_TEAM
+
+    p = pd.DataFrame(doc["players"].values())
+    assert (p.groupby("team_id").size() == STARTER_JE_TEAM).all()
+    assert p.starter_wahrscheinlichkeit.between(0.0, 1.0).all()
+    assert set(p.kategorie) == {1, 2}
+    assert set(p.fall) == {"a", "b", "c"}

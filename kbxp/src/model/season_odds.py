@@ -35,20 +35,21 @@ Angriff steckt in keiner Platzierungsquote und bleibt deshalb beim Carryover.
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from src.paths import LEGACY_DIR, PROCESSED, atomic_write_json  # noqa: E402
 
-from src.paths import LEGACY_DIR, PROCESSED  # noqa: E402
-
-N_SIMS = 8000       # simulierte Saisons je Runde
-ROUNDS = 60         # Anpassungsrunden; konvergiert in der Praxis nach ~30
+N_SIMS = 4000       # simulierte Saisons je Runde
+ROUNDS = 45         # Anpassungsrunden; konvergiert in der Praxis nach ~30
 STEP = 1.2          # Schrittweite der Korrektur
 MAX_GOALS = 15      # Abschneiden der Poisson-Ziehung
+CACHE_PATH = LEGACY_DIR / "season_odds_cache.json"
 
 LEAGUE_NAME = {"1": "Bundesliga", "2": "2. Bundesliga"}
 
@@ -165,15 +166,27 @@ def place_probs(theta: np.ndarray, hi: np.ndarray, ai: np.ndarray,
                           (gd, hi, gh - ga), (gd, ai, ga - gh)):
         np.add.at(arr.T, idx, val.T)
 
-    # Rang: Punkte, dann Tordifferenz, dann erzielte Tore - absteigend.
-    key = (pts.astype(np.int64) * 10_000 + (gd + 200) * 20 + np.minimum(gf, 19))
-    order = np.argsort(-key, axis=1, kind="stable")
+    order = _ranking_order(pts, gd, gf)
     out = {}
     for s in set(spots):
         up = np.zeros((n_sims, n_teams), dtype=bool)
         np.put_along_axis(up, order[:, :s], True, axis=1)
         out[s] = up.mean(axis=0)
     return out
+
+
+def _ranking_order(pts: np.ndarray, gd: np.ndarray,
+                   gf: np.ndarray) -> np.ndarray:
+    """Tabellenreihenfolge: Punkte, Tordifferenz, Tore - jeweils absteigend.
+
+    Eine fruehere zusammengesetzte Zahl deckelte erzielte Tore bei 19. Damit
+    waren sie in praktisch jeder simulierten Saison wirkungslos und bei
+    Gleichstand entschied still die alphabetische Eingangsreihenfolge.
+    ``lexsort`` bildet die drei Kriterien ohne kuenstliche Wertebereiche ab.
+    """
+    if pts.shape != gd.shape or pts.shape != gf.shape:
+        raise ValueError("pts, gd und gf muessen dieselbe Form haben")
+    return np.lexsort((-gf, -gd, -pts), axis=1)
 
 
 MAX_TARGET = 0.995   # eine Quote von 1,00 ist als Ziel unerreichbar
@@ -286,7 +299,15 @@ def markets_from_entry(entry: dict) -> list[dict]:
 def strength_for(liga: str, fixtures: list[tuple[str, str]],
                  odds_doc: dict | None = None,
                  matches: pd.DataFrame | None = None, **kw) -> dict[str, float] | None:
-    """Marktimplizierte Staerke je Team-ID fuer eine Liga, oder None ohne Quoten."""
+    """Marktimplizierte Staerke je Team-ID fuer eine Liga, oder None ohne Quoten.
+
+    Der Produktionspfad cached die teure Monte-Carlo-Inversion anhand aller
+    fachlichen Eingaenge. Spielplan und Vorsaisonquoten bleiben waehrend einer
+    Saison konstant; ohne Cache wuerde jeder ``fetch.py``-Lauf dieselbe
+    mehrminuetige Rechnung wiederholen. Benutzerdefinierte Dokumente,
+    historische Matches und Testparameter bleiben absichtlich ungecached.
+    """
+    use_cache = odds_doc is None and matches is None and not kw
     doc = odds_doc if odds_doc is not None else load_odds()
     entry = ((doc.get("leagues") or {}).get(liga)) if doc else None
     if not entry or not fixtures:
@@ -295,7 +316,41 @@ def strength_for(liga: str, fixtures: list[tuple[str, str]],
     if not markets:
         return None
     base, hfa = goal_params(liga, matches)
-    return fit_strength(markets, fixtures, base, hfa, **kw)
+    signature = None
+    cache = {}
+    if use_cache:
+        signature_payload = {
+            "entry": entry,
+            "fixtures": fixtures,
+            "base": base,
+            "hfa": hfa,
+            "n_sims": N_SIMS,
+            "rounds": ROUNDS,
+            "step": STEP,
+            "max_goals": MAX_GOALS,
+            "ranking": "points-gd-gf-v2",
+        }
+        raw = json.dumps(signature_payload, sort_keys=True,
+                         separators=(",", ":")).encode("utf-8")
+        signature = hashlib.sha256(raw).hexdigest()
+        try:
+            cache = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            cache = {"version": 1, "leagues": {}}
+        block = (cache.get("leagues") or {}).get(liga, {})
+        if block.get("signature") == signature and block.get("strength"):
+            return {str(t): float(v) for t, v in block["strength"].items()}
+
+    strength = fit_strength(markets, fixtures, base, hfa, **kw)
+    if use_cache and strength is not None:
+        cache.setdefault("version", 1)
+        cache["generated_at"] = datetime.now().isoformat(timespec="seconds")
+        cache.setdefault("leagues", {})[liga] = {
+            "signature": signature,
+            "strength": strength,
+        }
+        atomic_write_json(CACHE_PATH, cache, indent=2)
+    return strength
 
 
 def _cli() -> None:

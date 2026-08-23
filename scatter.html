@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Marktwert-Analyse — Kickbase Tools</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"
+        integrity="sha384-7TVmlZWH60iKX5Uk7lSvQhjtcgw2tkFjuwLcXoRSR4zXTyWFJRm9aPAguMh7CIra"
+        crossorigin="anonymous"></script>
+<script src="frontend-utils.js"></script>
 <style>
   :root {
     --bg:      #131417;
@@ -128,9 +131,15 @@
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
+    min-height: 32px;
   }
 
   .btn:hover:not(.active) { color: var(--text); }
+  .btn:focus-visible,
+  .cleaned-panel-close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 
   .btn.active {
     background: var(--accent);
@@ -166,6 +175,7 @@
 
   .mv-range input::placeholder { color: var(--muted); }
   .mv-range input:focus { color: var(--accent); }
+  .mv-range:focus-within { border-color: var(--accent); }
 
   .range-sep { color: var(--muted); font-size: 11px; user-select: none; }
 
@@ -400,7 +410,8 @@
 
   @media (max-width: 600px) {
     .page { padding: 14px 16px 12px; gap: 10px; }
-    .btn { padding: 6px 12px; font-size: 10px; }
+    .btn { padding: 6px 12px; font-size: 10px; min-height: 44px; }
+    .cleaned-panel-close { min-width: 44px; min-height: 44px; }
     header { flex-wrap: wrap; gap: 12px; }
     .nav { gap: 4px; }
     .nav a { font-size: 9px; padding: 8px 8px; }
@@ -425,31 +436,31 @@
     <div class="controls-row">
       <div class="filter-block">
         <span class="filter-label">Position</span>
-        <div class="btn-group">
-          <button class="btn"        onclick="togglePos('Tor')"        id="pos-tor">Tor</button>
-          <button class="btn active" onclick="togglePos('Abwehr')"     id="pos-abw">Abwehr</button>
-          <button class="btn active" onclick="togglePos('Mittelfeld')" id="pos-mit">Mittelfeld</button>
-          <button class="btn active" onclick="togglePos('Sturm')"      id="pos-stu">Sturm</button>
+        <div class="btn-group" role="group" aria-label="Positionen">
+          <button type="button" class="btn"        onclick="togglePos('Tor')"        id="pos-tor" aria-pressed="false">Tor</button>
+          <button type="button" class="btn active" onclick="togglePos('Abwehr')"     id="pos-abw" aria-pressed="true">Abwehr</button>
+          <button type="button" class="btn active" onclick="togglePos('Mittelfeld')" id="pos-mit" aria-pressed="true">Mittelfeld</button>
+          <button type="button" class="btn active" onclick="togglePos('Sturm')"      id="pos-stu" aria-pressed="true">Sturm</button>
         </div>
       </div>
       <div class="filter-block">
         <span class="filter-label">Min. Einsätze</span>
         <div class="mv-range">
-          <input type="number" id="min-apps" value="6" min="0" max="34" step="1" oninput="setApps()" style="width:100%">
+          <input type="number" id="min-apps" value="6" min="0" max="34" step="1" oninput="setApps()" style="width:100%" aria-label="Mindesteinsätze">
         </div>
       </div>
       <div class="filter-block">
         <span class="filter-label">Marktwert (Mio €)</span>
         <div class="mv-range">
-          <input type="number" id="mv-min" value="2" min="0" step="0.5" oninput="setMv()">
+          <input type="number" id="mv-min" value="2" min="0" step="0.5" oninput="setMv()" aria-label="Minimaler Marktwert in Millionen Euro">
           <span class="range-sep">–</span>
-          <input type="number" id="mv-max" placeholder="Max" min="0" step="0.5" oninput="setMv()">
+          <input type="number" id="mv-max" placeholder="Max" min="0" step="0.5" oninput="setMv()" aria-label="Maximaler Marktwert in Millionen Euro">
         </div>
       </div>
       <div class="filter-block">
         <span class="filter-label">Bereinigt</span>
         <div class="btn-group">
-          <button class="btn" id="cleaned-trigger" onclick="toggleCleanedPanel()">—</button>
+          <button type="button" class="btn" id="cleaned-trigger" onclick="toggleCleanedPanel()" aria-expanded="false" aria-controls="cleaned-panel" aria-label="Liste bereinigter Spieler öffnen">—</button>
         </div>
       </div>
     </div>
@@ -458,13 +469,13 @@
         <span class="filter-label">Spieler</span>
         <div class="mv-range search-wrap">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="search-input" placeholder="Name…" oninput="setSearch()" autocomplete="off">
+          <input type="text" id="search-input" placeholder="Name…" oninput="setSearch()" autocomplete="off" aria-label="Spieler suchen">
         </div>
       </div>
       <div class="filter-block">
         <span class="filter-label">Teams</span>
         <div class="btn-group team-filter-wrap">
-          <button class="btn active" id="team-trigger" onclick="toggleTeamPanel()">ALLE</button>
+          <button type="button" class="btn active" id="team-trigger" onclick="toggleTeamPanel()" aria-expanded="false" aria-controls="team-panel">ALLE</button>
           <div class="team-panel" id="team-panel"></div>
         </div>
       </div>
@@ -477,15 +488,15 @@
     <div id="cleaned-panel">
       <div class="cleaned-panel-head">
         <span class="cleaned-panel-title">Bereinigte Spieler</span>
-        <button class="cleaned-panel-close" onclick="toggleCleanedPanel()">✕</button>
+        <button type="button" class="cleaned-panel-close" onclick="toggleCleanedPanel()" aria-label="Liste schließen">✕</button>
       </div>
       <div class="cleaned-table" id="cleaned-table"></div>
     </div>
     <div class="x-toggle">
-      <div class="btn-group">
-        <button class="btn active" onclick="setX('avg')"   id="btn-avg">Ø Punkte</button>
-        <button class="btn"        onclick="setX('total')" id="btn-total">Ø Bereinigt</button>
-        <button class="btn"        onclick="setX('avgm')"  id="btn-avgm" hidden>Prognose Ø</button>
+      <div class="btn-group" role="group" aria-label="X-Achse">
+        <button type="button" class="btn active" onclick="setX('avg')"   id="btn-avg" aria-pressed="true">Ø Punkte</button>
+        <button type="button" class="btn"        onclick="setX('total')" id="btn-total" aria-pressed="false">Ø Bereinigt</button>
+        <button type="button" class="btn"        onclick="setX('avgm')"  id="btn-avgm" aria-pressed="false" hidden>Prognose Ø</button>
       </div>
     </div>
     <div id="r2-badge"></div>
@@ -620,9 +631,10 @@ const FALL_LABEL = {
 
 // ─── Datenverarbeitung ─────────────────────────────────────
 function processPlayers(raw, competition) {
-  const days = new Set();
-  raw.players.forEach(p => (p.performance || []).forEach(e => days.add(e.day)));
-  const currentDay = days.size ? Math.max(...days) : 34;
+  // Die API legt auch alle kuenftigen Spieltage als Null-Zeilen an. Fuer die
+  // Stammspieler-Aktualitaet zaehlt deshalb nur der letzte wirklich gespielte
+  // Tag; sonst waere currentDay das ganze Jahr ueber 34.
+  const currentDay = KickbaseUtils.latestPlayedDay(raw.players);
 
   return raw.players
     .filter(p => p.market_value?.current)
@@ -691,6 +703,8 @@ function buildTraces(players, combined, activeReg) {
         ? `<span style="color:#7e8187">Prognose Ø</span>  ${p.projA.xp} Ø Pkt` +
           `  <span style="color:#7e8187">±</span>  ${p.projA.streuung}<br>` +
           `<span style="color:#7e8187">${p.projA.pos} · ${FALL_LABEL[p.projA.fall] || p.projA.fall}</span>` +
+          (p.projA.starter_wahrscheinlichkeit == null ? ''
+            : `  <span style="color:#7e8187">Starter</span>  ${Math.round(100 * p.projA.starter_wahrscheinlichkeit)} %`) +
           (p.projA.hist === null ? ''
             : `  <span style="color:#7e8187">bisher</span>  ${p.projA.hist}`) + `<br>` +
           `<span style="color:#7e8187">Teamstärke</span>  ${p.projA.z_hat}` +
@@ -866,8 +880,12 @@ function render() {
 function setX(mode) {
   xMode = mode;
   for (const [id, m] of [['btn-avg', 'avg'], ['btn-total', 'total'],
-                         ['btn-avgm', 'avgm']])
-    document.getElementById(id).classList.toggle('active', mode === m);
+                         ['btn-avgm', 'avgm']]) {
+    const button = document.getElementById(id);
+    const selected = mode === m;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  }
   // "Prognose Ø" kennt keine Einsatzzahl, der Filter darf dort nichts wegnehmen.
   document.getElementById('min-apps').value = istAvgM() ? 0 : 6;
   setApps();
@@ -880,7 +898,10 @@ function togglePos(pos) {
     posFilter.add(pos);
   }
   const ids = { 'Tor': 'pos-tor', 'Abwehr': 'pos-abw', 'Mittelfeld': 'pos-mit', 'Sturm': 'pos-stu' };
-  document.getElementById(ids[pos]).classList.toggle('active', posFilter.has(pos));
+  const button = document.getElementById(ids[pos]);
+  const selected = posFilter.has(pos);
+  button.classList.toggle('active', selected);
+  button.setAttribute('aria-pressed', String(selected));
   render();
 }
 
@@ -927,6 +948,7 @@ function updateSearchPanel(players, combined, reg) {
     const punkte = istAvgM()
       ? `<div class="search-card-row"><span>Prognose Ø · ±</span><span>${p.projA.xp} · ${p.projA.streuung}</span></div>
          <div class="search-card-row"><span>Position · Fall</span><span>${p.projA.pos} · ${FALL_LABEL[p.projA.fall] || p.projA.fall}</span></div>
+         ${p.projA.starter_wahrscheinlichkeit == null ? '' : `<div class="search-card-row"><span>Starter-Wahrscheinlichkeit</span><span>${Math.round(100 * p.projA.starter_wahrscheinlichkeit)} %</span></div>`}
          <div class="search-card-row"><span>bisher · Teamstärke</span><span>${p.projA.hist ?? '–'} · ${p.projA.z_hat}</span></div>
          ${p.projA.mw_verhaeltnis == null ? '' : `<div class="search-card-row"><span>MW/Vorgänger · Alter Δ</span><span>${p.projA.mw_verhaeltnis} · ${p.projA.alter_delta}</span></div>`}
          ${p.projA.verletzt ? '<div class="search-card-row"><span>Status</span><span style="color:#ff4600">verletzt</span></div>' : ''}`
@@ -972,19 +994,21 @@ function toggleCleanedPanel() {
   cleanedPanelOpen = !cleanedPanelOpen;
   document.getElementById('cleaned-panel').classList.toggle('open', cleanedPanelOpen);
   document.getElementById('cleaned-trigger').classList.toggle('active', cleanedPanelOpen);
+  document.getElementById('cleaned-trigger').setAttribute('aria-expanded', String(cleanedPanelOpen));
 }
 
 function buildTeamButtons() {
   const teams = [...new Set(ALL_PLAYERS.map(p => p.team))].sort();
   teamFilter = new Set(teams);
   document.getElementById('team-panel').innerHTML = teams.map(t =>
-    `<button class="btn active" id="team-${t}" onclick="toggleTeam('${t}')">${t}</button>`
+    `<button type="button" class="btn active" id="team-${t}" onclick="toggleTeam('${t}')" aria-pressed="true">${t}</button>`
   ).join('');
 }
 
 function toggleTeamPanel() {
   teamPanelOpen = !teamPanelOpen;
   document.getElementById('team-panel').classList.toggle('open', teamPanelOpen);
+  document.getElementById('team-trigger').setAttribute('aria-expanded', String(teamPanelOpen));
 }
 
 function toggleTeam(team) {
@@ -997,7 +1021,12 @@ function toggleTeam(team) {
   } else {
     teamFilter.add(team);
   }
-  allTeams.forEach(t => document.getElementById(`team-${t}`).classList.toggle('active', teamFilter.has(t)));
+  allTeams.forEach(t => {
+    const button = document.getElementById(`team-${t}`);
+    const selected = teamFilter.has(t);
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
   updateTeamTrigger();
   render();
 }
@@ -1018,7 +1047,7 @@ function updateTeamTrigger() {
    oder passt sie nicht zur gewählten Saison/Liga, bleibt die Seite unverändert
    und der zugehörige Knopf einfach aus. */
 function attachProjections() {
-  if (liga !== '1' || (season && season !== SEASONS.current)) return;
+  if (season && season !== SEASONS.current) return;
   return ladeAvgModell().then(() => {
     /* Vor dem ersten Spieltag trägt data_1.json zwar alle 34 Spieltage, aber
        überall 0 Punkte und "0'" Minuten — jeder Spieler landet bei 0 Einsätzen
@@ -1035,10 +1064,13 @@ function attachProjections() {
 
 /* Das fallweise Modell ist die bedingte Produktionsprognose für Kategorie 1–2. */
 function ladeAvgModell() {
-  return fetch('data/player_projections_avg.json')
+  const datei = liga === '1'
+    ? 'data/player_projections_avg.json'
+    : `data/player_projections_avg_${liga}.json`;
+  return fetch(datei)
     .then(r => r.ok ? r.json() : null)
     .then(doc => {
-      if (!doc || !doc.players) return;
+      if (!doc || !doc.players || doc.liga !== liga) return;
       let treffer = 0;
       ALL_PLAYERS.forEach(p => {
         const e = doc.players[p.id];
@@ -1051,12 +1083,18 @@ function ladeAvgModell() {
 
 // ─── Daten laden ───────────────────────────────────────────
 fetch('data/seasons.json')
-  .then(r => r.json())
+  .then(r => {
+    if (!r.ok) throw new Error(`data/seasons.json: HTTP ${r.status}`);
+    return r.json();
+  })
   .then(manifest => {
     SEASONS = manifest;
     return fetch(`data/data_${liga}${seasonInfo(season).suffix}.json`);
   })
-  .then(r => r.json())
+  .then(r => {
+    if (!r.ok) throw new Error(`Saisondaten: HTTP ${r.status}`);
+    return r.json();
+  })
   .then(data => {
     ALL_PLAYERS = processPlayers(data, COMP_NAME[liga]);
     buildTeamButtons();

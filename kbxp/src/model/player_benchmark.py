@@ -26,8 +26,6 @@ reproduzierbares Forschungsartefakt, kein Produktionsdatum.
 
 from __future__ import annotations
 
-import json
-import math
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -49,7 +47,7 @@ from src.model.player_avg import (Daten, ERSTE_ZIELSAISON, LIGA1,
                                   backtest as avg_backtest,
                                   zeilen_aller_saisons)
 from src.model.player_model import backtest_p90
-from src.paths import INTERIM
+from src.paths import INTERIM, atomic_write_json
 
 
 ERSTE_OOF_SAISON = ERSTE_ZIELSAISON + 1   # 2017: zwei Jahre Anlauf fuer 2019
@@ -357,29 +355,6 @@ def _kalibrieren(df: pd.DataFrame, pred: str, target: str) -> pd.Series:
     return out
 
 
-def _router(df: pd.DataFrame, candidates: list[str], target: str,
-            ab: int = ERSTE_TESTSAISON) -> tuple[pd.Series, dict]:
-    """Je Fall genau ein Modell, gewaehlt nur aus frueheren OOF-Saisons."""
-    out = pd.Series(np.nan, index=df.index, dtype=float)
-    wahlen: dict[str, dict] = {}
-    for j in sorted(int(x) for x in df.j.unique() if x >= ab):
-        wahlen[str(j)] = {}
-        for fall in ("a", "b", "c"):
-            past = df[(df.j < j) & (df.fall == fall)]
-            scores = {}
-            for c in candidates:
-                s = past.dropna(subset=[c, target])
-                if s.j.nunique() < 2:
-                    continue
-                scores[c] = float(s.assign(e=(s[c] - s[target]).abs())
-                                  .groupby("j").e.mean().mean())
-            choice = min(scores, key=scores.get) if scores else candidates[0]
-            sel = (df.j == j) & (df.fall == fall)
-            out.loc[sel] = df.loc[sel, choice]
-            wahlen[str(j)][fall] = choice
-    return out, wahlen
-
-
 def _drucke(alles: dict, wahlen: dict) -> None:
     print("Walk-forward 2019--2025, gleiche Starter-Maske, Oe Punkte/Einsatz")
     ergebnisse, robust = alles["metrics"], alles["robustness"]
@@ -485,7 +460,7 @@ def main(path: Path | None = None) -> dict:
     }
     ziel = path or (INTERIM / "player_benchmark.json")
     ziel.parent.mkdir(parents=True, exist_ok=True)
-    ziel.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(ziel, out, indent=2)
     oof.to_csv(INTERIM / "player_benchmark_oof.csv", index=False)
     _drucke(alles, wahlen)
     print(f"\ngeschrieben: {ziel}")

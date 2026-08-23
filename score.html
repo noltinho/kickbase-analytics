@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kickbase · Matchup Analyse</title>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"
+          integrity="sha384-j4Ga4vVTRhNtxxpmW6hc+VyOHN//+8+Yk38kQuS1t74VZ36e6SkyHsm5Y75HmiNO"
+          crossorigin="anonymous"></script>
   <style>
     :root {
       --bg:       #131417;
@@ -401,10 +403,10 @@
   <!-- FILTER BAR -->
   <div class="filter-bar">
     <span class="filter-label">Spieltag</span>
-    <input type="number" class="day-input" id="day-from" min="1" max="34" value="1" />
+    <input type="number" class="day-input" id="day-from" min="1" max="34" value="1" aria-label="Erster Spieltag" />
     <span class="filter-sep">&ndash;</span>
-    <input type="number" class="day-input" id="day-to"   min="1" max="34" value="34" />
-    <select class="mode-select" id="score-mode" title="Paarung: mit eigener Angriffsstärke. Spielplan: nur die Schwierigkeit des Gegners.">
+    <input type="number" class="day-input" id="day-to"   min="1" max="34" value="34" aria-label="Letzter Spieltag" />
+    <select class="mode-select" id="score-mode" aria-label="Score-Modus" title="Paarung: mit eigener Angriffsstärke. Spielplan: nur die Schwierigkeit des Gegners.">
       <option value="pair">Paarung</option>
       <option value="fixture">Nur Spielplan</option>
     </select>
@@ -476,11 +478,10 @@ async function boot() {
   document.getElementById('logo-subtitle').textContent =
     (LIGA === '1' ? 'Bundesliga ' : '2. Bundesliga ') + currentSeason().label;
   try {
-    const [dRes, sRes] = await Promise.all([
-      fetch(DATA_FILE), fetch(PLAN_FILE)
+    const [data, matchdays] = await Promise.all([
+      fetchJson(DATA_FILE), fetchJson(PLAN_FILE)
     ]);
-    rawData          = await dRes.json();
-    const matchdays  = await sRes.json();
+    rawData = data;
     spielplan        = buildSpielplan(matchdays);
 
     /* Vorbelegung des Spieltagsfilters: nächster Spieltag bis Ende der Hinrunde.
@@ -639,8 +640,6 @@ function sigC(sigma, days) {
   if (sigma > 0) return avg > 1.5 ? 'sig3' : avg > 0.7 ? 'sig2' : 'sig1';
   return avg < -1.5 ? 'sigm3' : avg < -0.7 ? 'sigm2' : 'sigm1';
 }
-function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
-
 /* ── FILTER LISTENERS ──────────────────────────────────── */
 ['day-from','day-to'].forEach(elId => {
   document.getElementById(elId).addEventListener('change', function() {
@@ -658,7 +657,10 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
   });
 });
 
-boot();
+boot().catch(e => {
+  document.getElementById('table-section').innerHTML =
+    `<div class="state-msg">FEHLER: ${e.message}</div>`;
+});
 </script>
 </body>
 </html>
