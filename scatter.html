@@ -13,6 +13,7 @@
   :root {
     --bg:      #131417;
     --surface: #1a1d21;
+    --surface2:#21252a;
     --border:  #2f363f;
     --text:    #dee4ec;
     --muted:   #7e8187;
@@ -82,51 +83,70 @@
 
   /* ─── CONTROLS ────────────────────────────────────────── */
   .controls {
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    flex-shrink: 0;
+    gap: 12px;
+  }
+
+  .controls-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .controls-row {
     display: flex;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 12px 20px;
     align-items: flex-end;
   }
 
   .filter-block {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+    min-width: 0;
   }
 
+  .position-filter { flex: 0 0 310px; }
+  .apps-filter     { flex: 0 0 116px; }
+  .market-filter   { flex: 0 0 168px; }
+  .player-filter   { flex: 0 0 210px; }
+  .team-filter     { flex: 0 0 auto; }
+  .cleaned-filter  { flex: 0 0 auto; }
+
   .filter-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
     font-family: 'DM Mono', monospace;
     font-size: 9px;
     letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--muted);
-    padding-left: 2px;
+    margin-bottom: 5px;
   }
 
   .btn-group {
     display: flex;
-    gap: 3px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 3px;
+    gap: 4px;
   }
 
+  .position-filter .btn-group {
+    display: grid;
+    grid-template-columns: .75fr 1fr 1.4fr .85fr;
+  }
+
+  .position-filter .btn { padding-inline: 8px; }
+
   .btn {
-    background: transparent;
-    border: none;
+    background: var(--surface2);
+    border: 1px solid var(--border);
     color: var(--muted);
     font-family: 'DM Mono', monospace;
     font-size: 10px;
     letter-spacing: 1px;
     text-transform: uppercase;
-    padding: 5px 12px;
+    padding: 6px 10px;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s;
@@ -134,7 +154,7 @@
     min-height: 32px;
   }
 
-  .btn:hover:not(.active) { color: var(--text); }
+  .btn:hover:not(.active) { color: var(--text); border-color: var(--accent); }
   .btn:focus-visible,
   .cleaned-panel-close:focus-visible {
     outline: 2px solid var(--accent);
@@ -143,6 +163,7 @@
 
   .btn.active {
     background: var(--accent);
+    border-color: var(--accent);
     color: #131417;
     font-weight: 500;
   }
@@ -150,20 +171,20 @@
   .mv-range {
     display: flex;
     align-items: center;
-    gap: 5px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 5px 10px;
+    gap: 6px;
+    min-height: 32px;
   }
 
   .mv-range input {
-    background: transparent;
-    border: none;
+    background: var(--surface2);
+    border: 1px solid var(--border);
     color: var(--text);
     font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    width: 48px;
+    font-size: 11px;
+    width: 64px;
+    min-width: 0;
+    padding: 6px 8px;
+    border-radius: 6px;
     outline: none;
     text-align: center;
     -moz-appearance: textfield;
@@ -174,20 +195,34 @@
   .mv-range input::-webkit-inner-spin-button { -webkit-appearance: none; }
 
   .mv-range input::placeholder { color: var(--muted); }
-  .mv-range input:focus { color: var(--accent); }
-  .mv-range:focus-within { border-color: var(--accent); }
+  .mv-range input:hover,
+  .mv-range input:focus { border-color: var(--accent); }
 
   .range-sep { color: var(--muted); font-size: 11px; user-select: none; }
 
-  .search-wrap { gap: 6px; }
+  .apps-filter .mv-range input,
+  .market-filter .mv-range input { flex: 1; width: 100%; }
+
+  .search-wrap {
+    gap: 6px;
+    padding: 0 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .search-wrap:focus-within { border-color: var(--accent); }
 
   .search-wrap input {
     background: transparent;
     border: none;
     color: var(--text);
     font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    width: 90px;
+    font-size: 11px;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 0;
+    text-align: left;
     outline: none;
   }
 
@@ -195,20 +230,35 @@
   .search-wrap input:focus { color: var(--accent); }
 
   /* ─── TEAM FILTER ─────────────────────────────────────── */
-  .team-filter-wrap {
-    overflow: hidden;
-  }
+  .team-filter .btn-group,
+  .cleaned-filter .btn-group { width: 100%; }
+
+  .team-filter .btn,
+  .cleaned-filter .btn { width: 100%; padding-inline: 10px; }
 
   .team-panel {
-    display: flex;
-    gap: 3px;
-    max-width: 0;
-    overflow: hidden;
-    transition: max-width 0.25s ease;
+    display: none;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    max-height: 128px;
+    overflow-y: auto;
   }
 
   .team-panel.open {
-    max-width: 900px;
+    display: flex;
+  }
+
+  .team-panel .btn {
+    min-height: 36px;
+    padding: 7px 10px;
+  }
+
+  .team-panel .btn.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #131417;
   }
 
   /* ─── SEARCH PANEL ───────────────────────────────────── */
@@ -375,14 +425,12 @@
     height: 100%;
   }
 
-  /* ─── X-ACHSE TOGGLE (overlay) ───────────────────────── */
+  /* ─── X-ACHSE TOGGLE (eigene Zeile unter dem Plot) ───── */
   .x-toggle {
-    position: absolute;
-    bottom: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 10;
-    pointer-events: auto;
+    display: flex;
+    justify-content: center;
+    flex-shrink: 0;
+    min-height: 32px;
   }
 
   /* ─── R² BADGE ────────────────────────────────────────── */
@@ -409,12 +457,26 @@
   }
 
   @media (max-width: 600px) {
-    .page { padding: 14px 16px 12px; gap: 10px; }
-    .btn { padding: 6px 12px; font-size: 10px; min-height: 44px; }
+    html, body { height: auto; min-height: 100%; }
+    .page { height: auto; min-height: 100vh; padding: 14px 16px 12px; gap: 10px; }
+    .btn { padding: 6px 10px; font-size: 10px; min-height: 44px; }
     .cleaned-panel-close { min-width: 44px; min-height: 44px; }
     header { flex-wrap: wrap; gap: 12px; }
     .nav { gap: 4px; }
     .nav a { font-size: 9px; padding: 8px 8px; }
+    .controls-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 12px;
+    }
+    .position-filter,
+    .market-filter,
+    .player-filter { grid-column: 1 / -1; }
+    .position-filter, .apps-filter, .market-filter,
+    .player-filter, .team-filter, .cleaned-filter { width: auto; }
+    .mv-range input, .search-wrap { min-height: 44px; }
+    .team-panel { max-height: 176px; }
+    .chart-wrap { flex: none; height: 60vh; min-height: 420px; }
   }
 </style>
 </head>
@@ -432,55 +494,57 @@
     </nav>
   </header>
 
-  <div class="controls">
-    <div class="controls-row">
-      <div class="filter-block">
-        <span class="filter-label">Position</span>
-        <div class="btn-group" role="group" aria-label="Positionen">
-          <button type="button" class="btn"        onclick="togglePos('Tor')"        id="pos-tor" aria-pressed="false">Tor</button>
-          <button type="button" class="btn active" onclick="togglePos('Abwehr')"     id="pos-abw" aria-pressed="true">Abwehr</button>
-          <button type="button" class="btn active" onclick="togglePos('Mittelfeld')" id="pos-mit" aria-pressed="true">Mittelfeld</button>
-          <button type="button" class="btn active" onclick="togglePos('Sturm')"      id="pos-stu" aria-pressed="true">Sturm</button>
+  <section class="controls" aria-label="Diagrammfilter">
+    <div class="controls-grid">
+      <div class="controls-row">
+        <div class="filter-block position-filter">
+          <span class="filter-label">Position</span>
+          <div class="btn-group" role="group" aria-label="Positionen">
+            <button type="button" class="btn"        onclick="togglePos('Tor')"        id="pos-tor" aria-pressed="false">Tor</button>
+            <button type="button" class="btn active" onclick="togglePos('Abwehr')"     id="pos-abw" aria-pressed="true">Abwehr</button>
+            <button type="button" class="btn active" onclick="togglePos('Mittelfeld')" id="pos-mit" aria-pressed="true">Mittelfeld</button>
+            <button type="button" class="btn active" onclick="togglePos('Sturm')"      id="pos-stu" aria-pressed="true">Sturm</button>
+          </div>
+        </div>
+        <div class="filter-block apps-filter">
+          <label class="filter-label" for="min-apps">Einsätze</label>
+          <div class="mv-range">
+            <input type="number" id="min-apps" value="0" min="0" max="34" step="1" oninput="setApps()" style="width:100%" aria-label="Mindesteinsätze">
+          </div>
+        </div>
+        <div class="filter-block market-filter">
+          <span class="filter-label">Marktwert (Mio €)</span>
+          <div class="mv-range">
+            <input type="number" id="mv-min" value="2" min="0" step="0.5" oninput="setMv()" aria-label="Minimaler Marktwert in Millionen Euro">
+            <span class="range-sep">–</span>
+            <input type="number" id="mv-max" placeholder="Max" min="0" step="0.5" oninput="setMv()" aria-label="Maximaler Marktwert in Millionen Euro">
+          </div>
         </div>
       </div>
-      <div class="filter-block">
-        <span class="filter-label">Min. Einsätze</span>
-        <div class="mv-range">
-          <input type="number" id="min-apps" value="6" min="0" max="34" step="1" oninput="setApps()" style="width:100%" aria-label="Mindesteinsätze">
+      <div class="controls-row">
+        <div class="filter-block player-filter">
+          <label class="filter-label" for="search-input">Spieler</label>
+          <div class="mv-range search-wrap">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);flex-shrink:0" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="search-input" placeholder="Spielername…" oninput="setSearch()" autocomplete="off" aria-label="Spieler suchen">
+          </div>
         </div>
-      </div>
-      <div class="filter-block">
-        <span class="filter-label">Marktwert (Mio €)</span>
-        <div class="mv-range">
-          <input type="number" id="mv-min" value="2" min="0" step="0.5" oninput="setMv()" aria-label="Minimaler Marktwert in Millionen Euro">
-          <span class="range-sep">–</span>
-          <input type="number" id="mv-max" placeholder="Max" min="0" step="0.5" oninput="setMv()" aria-label="Maximaler Marktwert in Millionen Euro">
+        <div class="filter-block team-filter">
+          <span class="filter-label">Teams</span>
+          <div class="btn-group">
+            <button type="button" class="btn active" id="team-trigger" onclick="toggleTeamPanel()" aria-expanded="false" aria-controls="team-panel">Alle Teams</button>
+          </div>
         </div>
-      </div>
-      <div class="filter-block">
-        <span class="filter-label">Bereinigt</span>
-        <div class="btn-group">
-          <button type="button" class="btn" id="cleaned-trigger" onclick="toggleCleanedPanel()" aria-expanded="false" aria-controls="cleaned-panel" aria-label="Liste bereinigter Spieler öffnen">—</button>
+        <div class="filter-block cleaned-filter">
+          <span class="filter-label">Bereinigt</span>
+          <div class="btn-group">
+            <button type="button" class="btn" id="cleaned-trigger" onclick="toggleCleanedPanel()" aria-expanded="false" aria-controls="cleaned-panel" aria-label="Liste bereinigter Spieler öffnen">—</button>
+          </div>
         </div>
       </div>
     </div>
-    <div class="controls-row">
-      <div class="filter-block">
-        <span class="filter-label">Spieler</span>
-        <div class="mv-range search-wrap">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="search-input" placeholder="Name…" oninput="setSearch()" autocomplete="off" aria-label="Spieler suchen">
-        </div>
-      </div>
-      <div class="filter-block">
-        <span class="filter-label">Teams</span>
-        <div class="btn-group team-filter-wrap">
-          <button type="button" class="btn active" id="team-trigger" onclick="toggleTeamPanel()" aria-expanded="false" aria-controls="team-panel">ALLE</button>
-          <div class="team-panel" id="team-panel"></div>
-        </div>
-      </div>
-    </div>
-  </div>
+    <div class="team-panel" id="team-panel" role="group" aria-label="Teams auswählen"></div>
+  </section>
 
   <div class="chart-wrap">
     <div id="chart"></div>
@@ -492,14 +556,15 @@
       </div>
       <div class="cleaned-table" id="cleaned-table"></div>
     </div>
-    <div class="x-toggle">
-      <div class="btn-group" role="group" aria-label="X-Achse">
-        <button type="button" class="btn active" onclick="setX('avg')"   id="btn-avg" aria-pressed="true">Ø Punkte</button>
-        <button type="button" class="btn"        onclick="setX('total')" id="btn-total" aria-pressed="false">Ø Bereinigt</button>
-        <button type="button" class="btn"        onclick="setX('avgm')"  id="btn-avgm" aria-pressed="false" hidden>Prognose Ø</button>
-      </div>
-    </div>
     <div id="r2-badge"></div>
+  </div>
+
+  <div class="x-toggle">
+    <div class="btn-group" role="group" aria-label="X-Achse">
+      <button type="button" class="btn active" onclick="setX('avg')"   id="btn-avg" aria-pressed="true">Ø Punkte</button>
+      <button type="button" class="btn"        onclick="setX('total')" id="btn-total" aria-pressed="false">Ø Bereinigt</button>
+      <button type="button" class="btn"        onclick="setX('avgm')"  id="btn-avgm" aria-pressed="false" hidden>Prognose Ø</button>
+    </div>
   </div>
 
 </div>
@@ -528,7 +593,8 @@ let xMode       = 'avg';
 let posFilter   = new Set(['Abwehr', 'Mittelfeld', 'Sturm']);
 let mvMin       = 2e6;
 let mvMax       = Infinity;
-let minApps     = 6;
+let minApps     = 0;
+let defaultMinApps = 0;
 let teamFilter  = new Set();
 let teamPanelOpen = false;
 let searchQuery = '';
@@ -887,7 +953,7 @@ function setX(mode) {
     button.setAttribute('aria-pressed', String(selected));
   }
   // "Prognose Ø" kennt keine Einsatzzahl, der Filter darf dort nichts wegnehmen.
-  document.getElementById('min-apps').value = istAvgM() ? 0 : 6;
+  document.getElementById('min-apps').value = istAvgM() ? 0 : defaultMinApps;
   setApps();
 }
 
@@ -974,7 +1040,7 @@ function buildCleanedList() {
     .sort((a, b) => (b.cleaned_avg_pts - b.avg_pts) - (a.cleaned_avg_pts - a.avg_pts));
 
   const btn = document.getElementById('cleaned-trigger');
-  btn.textContent = list.length;
+  btn.textContent = `${list.length} Spieler`;
 
   document.getElementById('cleaned-table').innerHTML = list.map(p => {
     const delta = (p.cleaned_avg_pts - p.avg_pts).toFixed(1);
@@ -1003,6 +1069,7 @@ function buildTeamButtons() {
   document.getElementById('team-panel').innerHTML = teams.map(t =>
     `<button type="button" class="btn active" id="team-${t}" onclick="toggleTeam('${t}')" aria-pressed="true">${t}</button>`
   ).join('');
+  updateTeamTrigger();
 }
 
 function toggleTeamPanel() {
@@ -1035,10 +1102,10 @@ function updateTeamTrigger() {
   const total = document.querySelectorAll('#team-panel .btn').length;
   const btn = document.getElementById('team-trigger');
   if (teamFilter.size === total) {
-    btn.textContent = 'ALLE';
+    btn.textContent = 'Alle Teams';
     btn.classList.add('active');
   } else {
-    btn.textContent = `${teamFilter.size}/${total}`;
+    btn.textContent = `${teamFilter.size}/${total} Teams`;
     btn.classList.remove('active');
   }
 }
@@ -1096,6 +1163,9 @@ fetch('data/seasons.json')
     return r.json();
   })
   .then(data => {
+    defaultMinApps = KickbaseUtils.defaultMinAppearances(data.players);
+    minApps = defaultMinApps;
+    document.getElementById('min-apps').value = defaultMinApps;
     ALL_PLAYERS = processPlayers(data, COMP_NAME[liga]);
     buildTeamButtons();
     buildCleanedList();

@@ -144,3 +144,10 @@ def test_relative_document_links_stay_inside_repository() -> None:
             resolved = (doc.parent / target).resolve()
             resolved.relative_to(ROOT)
             assert resolved.exists(), f"{doc.name}: {target} fehlt"
+
+
+@pytest.mark.parametrize("name", ["teampunkte.html", "matchup.html"])
+def test_team_tools_use_separate_seasons_and_full_matchday_range(name: str) -> None:
+    text = (ROOT / name).read_text(encoding="utf-8")
+    assert "storedSeason(), false, true" in text
+    assert "Array.from({ length: 34 }, (_, i) => i + 1)" in text

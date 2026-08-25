@@ -618,35 +618,28 @@ Chart.register({
 /* ─── Globale Zustandsvariablen (Filter, Sortierung usw.) ── */
 let rawData = null;
 let matchdays = null;
-let carry = null;   // data/carryover.json
-let cidx  = null;   // Vorsaison-Index der Liga — nur in der Aggregat-Sicht
-let axis  = [];     // Vorsaison + laufende Saison als durchgehende Achse
+let axis  = [];     // Spieltage 1–34 der gewählten Saison
 let liga = '2';
-let season = SEASON_AGG;
+let season = null;
 let chartInstance = null;
 let sortDir = 'desc';
 let useAvg = false;
 
-/* Saison-Manifest, Vorsaison-Übertrag und Achse kommen aus common.js. */
+/* Saison-Manifest und Achsen-Helfer kommen aus common.js. */
 
 /* ─── Seite laden: JSON holen und Dashboard starten ─── */
 async function boot() {
   liga = localStorage.getItem('kickbase_liga') || '2';
   await loadSeasonManifest();
-  season = fillSeasonSelect(document.getElementById('filter-season'), storedSeason());
+  season = fillSeasonSelect(document.getElementById('filter-season'), storedSeason(), false, true);
   saveSeason(season);
-  carry = await loadCarryover();
   await loadSeason();
 }
 
 async function loadSeason() {
-  // Die aggregierte Sicht rechnet mit den Dateien der laufenden Saison; die
-  // Vorsaison kommt kompakt aus carryover.json.
   const suffix    = seasonInfo(season).suffix;
   const dataFile  = `data/data_${liga}${suffix}.json`;
   const matchFile = `data/matchdays_bl${liga}${suffix}.json`;
-  cidx = isAgg(season) ? carryIndex(carry, liga) : null;
-
   document.getElementById('logo-subtitle').textContent =
     (liga === '1' ? 'BUNDESLIGA ANALYSE' : '2. BUNDESLIGA ANALYSE')
     + ` (${seasonLabel(season)})`;
@@ -679,10 +672,10 @@ async function loadSeason() {
   }
 }
 
-/* ─── Achse aufbauen und Spieltag-Inputs darauf setzen ─── */
+/* ─── Achse aufbauen und Spieltag-Inputs auf 1–34 setzen ─ */
 function initAxis() {
-  const days = matchdays ? playedDays(matchdays) : playedDaysFallback(rawData);
-  axis = buildAxis(cidx, days, isAgg(season));
+  const days = new Set(Array.from({ length: 34 }, (_, i) => i + 1));
+  axis = buildAxis(null, days, false);
   // Zuletzt gewähltes Fenster schlägt das Standardfenster; die Achse kann seither
   // gewachsen oder (nach Saisonwechsel) kürzer sein, deshalb hinterher klemmen.
   const r = storedDayRange(season) || defaultRange(axis);
@@ -714,29 +707,6 @@ function compute() {
   const teams = {};
   Object.keys(rawData.teams).forEach(id => {
     teams[id] = { total:0, byPos:{1:0,2:0,3:0,4:0}, games: new Set() };
-  });
-
-  // Vorsaison: fertig vorberechnet, Auf-/Absteiger über den gelernten Faktor
-  // auf das Niveau der neuen Liga skaliert.
-  span.filter(a => a.season === 'prev').forEach(a => {
-    Object.keys(teams).forEach(id => {
-      const d = carryDay(cidx, id, a.day);
-      if (!d) return;
-      if (venueFilter === 'home' && !d.home) return;   // d.home = Team spielte zuhause
-      if (venueFilter === 'away' &&  d.home) return;
-      teams[id].games.add('V' + a.day);
-      [1,2,3,4].forEach(pos => {
-        if (posFilter !== 'all' && String(pos) !== posFilter) return;
-        const v = carryVal(cidx, id, d, 'conceded', pos);
-        teams[id].total += v;
-        teams[id].byPos[pos] += v;
-      });
-      // Spieler ohne Position: in die Summe, in keinen Balken — wie in der
-      // laufenden Saison auch.
-      if (posFilter === 'all') {
-        teams[id].total += carryUnpositioned(cidx, id, d, 'conceded');
-      }
-    });
   });
 
   const curDays = new Set(span.filter(a => a.season === 'cur').map(a => a.day));
@@ -779,7 +749,7 @@ function render() {
   const rows = Object.entries(teams).map(([id, d]) => ({
     id,
     name: rawData.teams[id] || id,
-    note: cidx ? carryNote(cidx, id, 'conceded') : '',
+    note: '',
     total: Math.round(d.total),
     byPos: Object.fromEntries([1,2,3,4].map(p => [p, Math.round(d.byPos[p])])),
     games: d.games.size,

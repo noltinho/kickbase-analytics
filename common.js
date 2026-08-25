@@ -125,8 +125,9 @@ function seasonLabel(key) {
    ``withAgg === false`` lässt die aggregierte Sicht weg. Das ist für Seiten
    gedacht, die ihre Werte aus data/ratings.json beziehen: dort steckt die
    Vorsaison ohnehin schon im Modell (Gewicht 0,30, Carryover, Quoten-Prior),
-   der Eintrag würde also dasselbe Ergebnis liefern wie die laufende Saison. */
-function fillSeasonSelect(el, value, withAgg) {
+   der Eintrag würde also dasselbe Ergebnis liefern wie die laufende Saison.
+   ``archiveAsSeason`` beschriftet Einzelarchive als "Saison" statt "Archiv". */
+function fillSeasonSelect(el, value, withAgg, archiveAsSeason) {
   const cur = currentSeason(), prev = prevSeason();
   const opts = [];
   if (withAgg !== false && prev) {
@@ -135,7 +136,7 @@ function fillSeasonSelect(el, value, withAgg) {
   }
   SEASONS.seasons.forEach(s => {
     opts.push(`<option value="${s.key}">`
-            + `${s.key === SEASONS.current ? 'Saison' : 'Archiv'} ${s.label}</option>`);
+            + `${s.key === SEASONS.current || archiveAsSeason ? 'Saison' : 'Archiv'} ${s.label}</option>`);
   });
   el.innerHTML = opts.join('');
   let v = normalizeSeason(value);

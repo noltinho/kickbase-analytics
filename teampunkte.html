@@ -631,16 +631,14 @@ const POS_KEYS  = [1, 2, 3, 4];
    'spread' = Min–Max gespreizt (Letzter leer, Erster voll) */
 const FILL_MODE = 'best';
 
-/* Saison-Manifest, Vorsaison-Übertrag und Achse kommen aus common.js. */
+/* Saison-Manifest und Achsen-Helfer kommen aus common.js. */
 
 /* ─── Globale Zustandsvariablen ─────────────────────────── */
 let rawData     = null;   // data_<liga>[_<saison>].json
 let matchdays   = null;   // matchdays_bl<liga>[_<saison>].json
-let carry       = null;   // data/carryover.json (einmal geladen)
-let cidx        = null;   // Vorsaison-Index der Liga — nur in der Aggregat-Sicht
-let axis        = [];     // Vorsaison + laufende Saison als durchgehende Achse
+let axis        = [];     // Spieltage 1–34 der gewählten Saison
 let liga        = '2';
-let season      = SEASON_AGG;
+let season      = null;
 let useNorm     = true;   // ⌀ je Startelf-Spieler statt Gesamtpunkten
 
 /* Indizes, einmal je geladener Saison aufgebaut */
@@ -652,21 +650,16 @@ let lineupDays  = new Set();  // "teamId|day" mit echter Aufstellung (sonst Minu
 async function boot() {
   liga = localStorage.getItem('kickbase_liga') || '2';
   await loadSeasonManifest();
-  season = fillSeasonSelect(document.getElementById('filter-season'), storedSeason());
+  season = fillSeasonSelect(document.getElementById('filter-season'), storedSeason(), false, true);
   saveSeason(season);
-  carry = await loadCarryover();
   await loadSeason();
 }
 
 /* ─── Daten + Spielplan der gewählten Saison holen ──────── */
 async function loadSeason() {
-  // Die aggregierte Sicht rechnet mit den Dateien der laufenden Saison; die
-  // Vorsaison kommt kompakt aus carryover.json statt aus dem 2,6-MB-Archiv.
   const suffix    = seasonInfo(season).suffix;
   const dataFile  = `data/data_${liga}${suffix}.json`;
   const matchFile = `data/matchdays_bl${liga}${suffix}.json`;
-  cidx = isAgg(season) ? carryIndex(carry, liga) : null;
-
   document.getElementById('logo-subtitle').textContent =
     (liga === '1' ? 'BUNDESLIGA ANALYSE' : '2. BUNDESLIGA ANALYSE')
     + ` (${seasonLabel(season)})`;
@@ -756,12 +749,12 @@ function buildIndexes() {
   });
 }
 
-/* ─── Achse aufbauen und Spieltag-Inputs darauf setzen ───
-   Gezählt werden nur wirklich gespielte Spieltage — die noch leeren Spieltage
-   stehen mit points: 0 in den Daten und wären sonst echte Nullen. */
+/* ─── Achse aufbauen und Spieltag-Inputs auf 1–34 setzen ──
+   Der auswählbare Saisonrahmen bleibt vollständig; ungespielte Partien tragen
+   keine Punkte und werden in Tabellen- und Durchschnittswerten nicht gezählt. */
 function initAxis() {
-  const days = matchdays ? playedDays(matchdays) : playedDaysFallback(rawData);
-  axis = buildAxis(cidx, days, isAgg(season));
+  const days = new Set(Array.from({ length: 34 }, (_, i) => i + 1));
+  axis = buildAxis(null, days, false);
   // Zuletzt gewähltes Fenster schlägt das Standardfenster; die Achse kann seither
   // gewachsen oder (nach Saisonwechsel) kürzer sein, deshalb hinterher klemmen.
   const r = storedDayRange(season) || defaultRange(axis);
@@ -796,38 +789,6 @@ function computeTeamPoints() {
       slots:      {1:0, 2:0, 3:0, 4:0, total:0},       // besetzte Startelf-Plätze
       playedDays: new Set()
     };
-  });
-
-  // Vorsaison: schon fertig je Team, Spieltag und Position vorberechnet,
-  // Auf-/Absteiger über den gelernten Faktor auf die neue Liga skaliert.
-  span.filter(a => a.season === 'prev').forEach(a => {
-    Object.keys(teams).forEach(id => {
-      const d = carryDay(cidx, id, a.day);
-      if (!d) return;
-      if (venueFilter === 'home' && !d.home) return;
-      if (venueFilter === 'away' &&  d.home) return;
-      const t = teams[id];
-      t.playedDays.add('V' + a.day);
-      POS_KEYS.forEach(pos => {
-        const scored = carryVal(cidx, id, d, 'scored', pos);
-        const start  = carryVal(cidx, id, d, 'start',  pos);
-        t.total          += scored;
-        t.byPos[pos]     += scored;
-        t.startTotal     += start;
-        t.startPos[pos]  += start;
-        t.benchPos[pos]  += scored - start;
-        const slots = carryVal(cidx, id, d, 'slots', pos);
-        t.slots[pos]     += slots;
-        t.slots.total    += slots;
-      });
-      // Spieler ohne Position: in die Summen, in kein Band — wie in der
-      // laufenden Saison auch.
-      const uScored = carryUnpositioned(cidx, id, d, 'scored');
-      const uStart  = carryUnpositioned(cidx, id, d, 'start');
-      t.total       += uScored;
-      t.startTotal  += uStart;
-      t.slots.total += carryUnpositioned(cidx, id, d, 'slots');
-    });
   });
 
   const curDays = new Set(span.filter(a => a.season === 'cur').map(a => a.day));
@@ -870,9 +831,7 @@ function computeTeamPoints() {
   return teams;
 }
 
-/* ─── Bundesliga-Tabelle aus dem Spielplan berechnen ──────
-   Auch in der Aggregat-Sicht nur aus der laufenden Saison: die Tabelle ist eine
-   Tatsache dieser Saison, keine Mischgröße. */
+/* ─── Bundesliga-Tabelle aus dem Spielplan berechnen ────── */
 function computeStandings() {
   const venueFilter = document.getElementById('filter-venue').value;
   const { from, to } = getRange();
@@ -969,7 +928,7 @@ function render() {
     return {
       id,
       name:  rawData.teams[id] || id,
-      note:  cidx ? carryNote(cidx, id, 'scored') : '',
+      note:  '',
       total: p.total,
       byPos: p.byPos,
       startTotal: p.startTotal,

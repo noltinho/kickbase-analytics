@@ -22,5 +22,10 @@
     return latest;
   }
 
-  return { latestPlayedDay };
+  /** Mindesteinsaetze: mindestens die Haelfte der bereits gespielten Spieltage. */
+  function defaultMinAppearances(players) {
+    return Math.ceil(latestPlayedDay(players) / 2);
+  }
+
+  return { latestPlayedDay, defaultMinAppearances };
 }));
