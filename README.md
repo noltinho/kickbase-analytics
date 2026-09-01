@@ -1,5 +1,10 @@
 # Kickbase Tools
 
+[![CI](https://github.com/Noltinho/kickbase-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/Noltinho/kickbase-analytics/actions/workflows/ci.yml)
+
+**[▶ Live-Demo](https://noltinho.github.io/kickbase-analytics/)** — die sechs
+Oberflächen laufen direkt im Browser, ohne Installation und ohne Login.
+
 Statische Analysewerkzeuge für Bundesliga und 2. Bundesliga: Ein Python-Fetcher
 verdichtet Spiel-, Spieler- und Marktwertdaten, ein gegnerbereinigtes
 Teamstärkemodell bewertet Matchups, und sechs frameworkfreie HTML-Seiten machen
@@ -136,6 +141,16 @@ eine walk-forward geprüfte Starter-Logistik die dort fehlenden handgepflegten
 Kategorien. Die
 gemessenen Grenzen und Vergleichsmodelle sind nicht aus dem README ausgelagert,
 sondern im Benchmark nachvollziehbar.
+
+Als flächendeckende Vergleichslinie dient eine einfache
+**Marktwert-/Positionsbaseline**. Sie wird je Zielsaison ausschließlich auf
+früheren Saisons geschätzt und verwendet den Marktwert sowie den kategorialen
+Positions- und Fallkontext. Ihr MAE beträgt 19,28, der des fallweisen Modells
+16,64. Auf der gemeinsamen Maske von 1.571 Starter-Spielersaisons liegt das
+fallweise Modell paarweise um 2,64 MAE-Punkte vorn
+(saisongeclustertes 95-%-Intervall 2,23 bis 3,00) und gewinnt in allen sieben
+Zielsaisons. Aufbau, weitere Baselines und Aufschlüsselungen stehen in
+[kbxp/player-benchmark.md](kbxp/player-benchmark.md).
 
 ## Repository-Struktur
 

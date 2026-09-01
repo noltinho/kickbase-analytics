@@ -46,7 +46,7 @@ from sklearn.preprocessing import OneHotEncoder, SplineTransformer, StandardScal
 from src.model.player_avg import (Daten, ERSTE_ZIELSAISON, LIGA1,
                                   backtest as avg_backtest,
                                   zeilen_aller_saisons)
-from src.model.player_model import backtest_p90
+from src.model.player_role_model import backtest_p90
 from src.paths import INTERIM, atomic_write_json
 
 
@@ -408,17 +408,31 @@ def main(path: Path | None = None) -> dict:
     # keine erfundene Zahl und faellt nur aus deren eigener Kennzahl heraus.
     oof["historie_roh"] = oof.a1
 
+    # Die naivste denkbare Regel: der ungewichtete Punkteschnitt je Einsatz
+    # aus der Vorsaison, unveraendert uebernommen. Sie bekommt bewusst auch
+    # keine Fall-Niveaukorrektur -- eine Vergleichslinie, die erst
+    # zurechtgerueckt werden muss, ist keine mehr. Wer in der Vorsaison nicht
+    # in dieser Liga gespielt hat, hat keinen Wert: Zu diesen Spielern sagt
+    # die Regel nichts, statt etwas zu erfinden.
+    vorsaison = (dat.ss[dat.ss.league == LIGA1][["player_id", "j", "avg_alle"]]
+                 .drop_duplicates(["player_id", "j"])
+                 .rename(columns={"avg_alle": "vorsaison_roh"}))
+    vorsaison["j"] = vorsaison.j + 1
+    oof = oof.merge(vorsaison, on=["player_id", "j"], how="left")
+
     basis = ["fallweise", "rollenmodell_gesetzt", "empirical_bayes", "ridge",
              "spline_ridge", "gradient_huber", "hist_gradient",
-             "extra_trees", "market_only", "historie_roh"]
+             "extra_trees", "market_only", "historie_roh",
+             "vorsaison_roh"]
     cols = {}
     for p in basis:
         c = f"{p}__Ganzjahr"
         # Die neue fallweise Kalibrierung ist bereits innerhalb jedes
         # Walk-forward-Schritts gebaut. Alle Challenger erhalten weiterhin
-        # dieselbe wachsende Fall-Niveaukorrektur.
-        oof[c] = oof[p] if p == "fallweise" else _kalibrieren(
-            oof, p, "jahr_avg")
+        # dieselbe wachsende Fall-Niveaukorrektur; nur die naive Vorsaison-
+        # Linie bleibt roh, weil genau ihre Unbehandeltheit der Punkt ist.
+        oof[c] = (oof[p] if p in ("fallweise", "vorsaison_roh")
+                  else _kalibrieren(oof, p, "jahr_avg"))
         cols[p] = c
 
     ev = oof[oof.j >= ERSTE_TESTSAISON].copy()

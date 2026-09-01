@@ -1,4 +1,7 @@
-"""Spielermodell: Oe Punkte je Einsatz = p90 (Qualitaet) x Minuten je Einsatz (Rolle).
+"""Rollenmodell-Challenger: Oe Punkte je Einsatz = p90 (Qualitaet) x Minuten je Einsatz (Rolle).
+
+Dieses Forschungsmodell wird im gemeinsamen Spielermodell-Benchmark gegen das
+produktive fallweise Modell geprueft. Es besitzt bewusst keinen Live-Export.
 
 Die Zielgroesse ist der **Punkteschnitt je Einsatz** der Hinrunde — dieselbe
 Skala, die Kickbase als "Oe Punkte" zeigt. Nicht Punkte je Spieltag: vergangene
@@ -69,10 +72,7 @@ Was verworfen wurde, mit Zahl:
 
 from __future__ import annotations
 
-import json
 import sys
-from datetime import datetime
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -83,7 +83,7 @@ from src.model.player_features import (  # noqa: E402
 from src.model.team_strength import (  # noqa: E402
     conceded_from_panel, load_splits, pairwise_accuracy,
 )
-from src.paths import LEGACY_DIR, MANUAL, PROCESSED, atomic_write_json  # noqa: E402
+from src.paths import PROCESSED  # noqa: E402
 
 # --- Prior-Kette ------------------------------------------------------------
 #
@@ -345,8 +345,7 @@ def rolle_aus_startquote(startquote) -> np.ndarray:
 
     Grenzen auf der Startquote statt auf den Minuten, weil die Rolle eine
     Aussage ueber die Aufstellung ist und nicht ueber die Ausdauer. Wer keine
-    Vorsaison hat, bekommt None — fuer ihn traegt die Zielrolle (aus
-    ``kategorie``) oder der Rueckfall die Auskunft.
+    Vorsaison hat, bekommt None — fuer ihn traegt der Rueckfall die Auskunft.
     """
     q = np.asarray(startquote, dtype=float)
     idx = np.searchsorted(np.asarray(ROLLEN_GRENZEN), q, side="right")
@@ -468,8 +467,8 @@ def verteilung_kalibriert(uebg: dict, rolle_von, p_gesetzt) -> dict:
 def verteilung_kalibriert_form(form: dict, p_gesetzt) -> dict:
     """Wie ``verteilung_kalibriert``, aber mit fertiger Form.
 
-    Der Export kennt die Form aus KATEGORIE_ROLLEN statt aus der
-    Uebergangsmatrix — die Eichung an der Logistik ist dieselbe.
+    Die Form kann auch ausserhalb der Uebergangsmatrix vorbereitet werden;
+    die Eichung an der Logistik ist dieselbe.
     """
     if p_gesetzt is None or not np.isfinite(p_gesetzt):
         return dict(form)
@@ -775,8 +774,8 @@ def merkmalszeilen(saison: str, kandidaten: pd.DataFrame, ss: pd.DataFrame,
 
     # Rolle und die daraus folgende Einsatzlaenge. Die Zielrolle ist hier die
     # der Vorsaison — das ist alles, was der Backtest vorab wissen kann. Der
-    # Export ersetzt sie durch die handgepflegte ``kategorie``, die Transfers
-    # kennt; wie viel das wert ist, beziffert der Orakel-Lauf.
+    # Wie viel perfekte Kenntnis der Zielrolle wert waere, beziffert der
+    # Orakel-Lauf.
     #
     # Eigene, breitere Trainingsmenge: ``train`` verlangt MIN_TRAIN Minuten und
     # kennt die Rolle "Rand" damit fast nicht. Fuer die Tabelle genuegen drei
@@ -867,8 +866,7 @@ MERKMALE = ["belegt", "alter_c", "alter_fehlt", "mw_resid", "team_delta",
 # Rollenwahrscheinlichkeit: setzt sich der Spieler durch? Die Merkmale sind
 # gemessen wirksam — innerhalb der Vorjahres-Rotation trennen Marktwert-Rang
 # und Vorjahres-Startquote von 9,1 % bis 33,2 % Durchsetzung (Basisrate 19 %).
-# Genau deshalb muessen die handgepflegten Kategorien *nicht* verfeinert
-# werden: die Feinunterscheidung innerhalb einer Kategorie leistet das Modell.
+# Damit trennt das Modell Spieler auch innerhalb derselben Ausgangsrolle.
 ROLLE_MERKMALE = ["p_basis_logit", "startquote_v1", "einsatzquote_v1",
                   "min_je_teamspieltag_v1", "kader_fehlquote_v1", "hat_v1",
                   "mw_rang_c", "n_konk_c", "mw_resid", "alter_c", "alter_q",
@@ -902,7 +900,6 @@ def backtest_p90(delta: float = DELTA, k_mix: float = K_MIX,
                  pool_bl2: bool = False, ohne_teamstaerke: bool = False,
                  mit_vorgaenger: bool = False, nur_mix: bool = False,
                  bl2_gewicht: float = BL2_GEWICHT, k_tw: float = K_TW,
-                 nur_kalibrierzeilen: bool = False,
                  orakel: bool = False) -> pd.DataFrame:
     """Je Zielsaison 2015/16+ nur aus frueheren Saisons vorhersagen.
 
@@ -910,9 +907,6 @@ def backtest_p90(delta: float = DELTA, k_mix: float = K_MIX,
     kalibriert), Hinrunden-Ist und Ganzjahres-Ist. ``nur_mix`` ueberspringt
     die p90-Ridge — der Abstand zwischen beiden Spalten misst, was die
     Kalibrierung ueber die Prior-Kette hinaus beitraegt.
-    ``nur_kalibrierzeilen`` liefert die Merkmalszeilen ohne jede Kalibrierung;
-    ``export`` fittet daraus einen einzigen Satz Koeffizienten fuer die
-    Zielsaison, statt die Walk-forward-Kette zu wiederholen.
     """
     panel = lade_panel()
     panel = panel[panel.season != "2026/2027"]
@@ -986,8 +980,6 @@ def backtest_p90(delta: float = DELTA, k_mix: float = K_MIX,
     # trainiert, deren Merkmale ihrerseits nur noch aeltere Saisons sahen.
     merkmale = MERKMALE + (["vorgaenger_diff"] if mit_vorgaenger else [])
     rows["p90_dach"] = rows.p90_mix
-    if nur_kalibrierzeilen:
-        return rows
     if not nur_mix:
         feld = rows.pos != TW
         for saison in ziele[1:]:
@@ -1042,7 +1034,7 @@ def backtest_p90(delta: float = DELTA, k_mix: float = K_MIX,
 
     # Die Rollenwahrscheinlichkeit eicht jetzt die Verteilung, aus der die
     # Einsatzlaenge gemittelt wird. Deshalb steht sie hier oben und nicht mehr
-    # am Ende: sie ist keine Zusatzangabe fuer den Export, sondern ein Eingang
+    # am Ende: sie ist keine Zusatzangabe fuer die Auswertung, sondern ein Eingang
     # des Ertragspfads. Siehe verteilung_kalibriert fuer das Warum.
     vert = [verteilung_kalibriert(uebergangs[sa], r, pr)
             for sa, r, pr in zip(rows.saison, rows.zielrolle, rows.p_rolle)]
@@ -1240,7 +1232,7 @@ def report_ertrag(rows: pd.DataFrame) -> dict:
 
     # --- Die Zielgruppe, getrennt von der Gesamtheit ------------------------
     # Ein Kader besteht zu rund einem Drittel aus Spielern, die normalerweise
-    # nicht spielen (im Export 2026/27: 140 von 466 in Kategorie 5). Ein r
+    # nicht spielen. Ein r
     # ueber alle bewertbaren Spielersaisons misst also zu einem grossen Teil,
     # wie gut man Randfiguren sortiert — eine Frage, die beim Kaderbau nicht
     # gestellt wird. Gekauft werden Kategorie 1 und 2, und dort vor allem der
@@ -1485,475 +1477,38 @@ def report_oekonomie(rows: pd.DataFrame, band: tuple[float, float] = (2e6, 1e7),
     return {"siege": siege, "n": n, **mittel}
 
 
-# ---------------------------------------------------------------------------
-# Export fuer die Zielsaison — data/player_projections.json
-# ---------------------------------------------------------------------------
-#
-# Alles in diesem Abschnitt ist im Walk-forward NICHT messbar (kategorie gibt
-# es nur fuer 2026/27, history.json reicht ein Jahr zurueck). Deshalb liegt es
-# getrennt vom validierten Kern, wird erst NACH der Modellrechnung angewandt
-# und traegt je Spieler ein Quellen-Flag — im Export ist ablesbar, wie viel
-# Prognose aus Messung und wie viel aus Setzung stammt.
-
-# kategorie (fine_positions.csv) -> Verteilung ueber die Rollen.
-#
-# Die Kategorie ist eine **Rollen-Hierarchie im Kader**, keine Einsatzzeit:
-# 1 = unumstrittener Stammspieler bis 5 = Reserve. Kategorie 1 bis 4 zielen
-# alle auf dieselbe Rolle ("gesetzt") — das ist die Position, um die sie
-# konkurrieren. Sie unterscheiden sich darin, wie wahrscheinlich sie sie
-# halten, und genau das steht hier.
-#
-# **Diese Zahlen sind gesetzt, nicht gemessen** — kategorie gibt es nur fuer
-# 2026/27, ein Walk-forward ist unmoeglich. Backtestbar ist die Struktur
-# (Rolle -> Einsatzlaenge -> Punkte, mit der Vorsaison-Rolle als Eingang:
-# r 0,606) und die obere Schranke bei perfekter Rollenkenntnis (r 0,779).
-# Was kategorie davon einloest, ist erst nach ein paar Spieltagen messbar.
-#
-# Die Stufen folgen der Beschreibung der Kaderpflege: 1 und 2 sind gesetzt,
-# 3 und 4 sind die Risikospieler ("entweder einer setzt sich durch, oder es
-# wird abgewechselt"), 5 ist Reserve. Zum Vergleich die *gemessenen*
-# Uebergaenge aus der Vorsaison-Rolle: gesetzt -> 59 % bleiben gesetzt,
-# Rotation -> 34 %, geteilt -> 21 %, Rand -> 10 %. Die Kategorie ist eine
-# Aussage ueber die kommende Saison und darf deshalb zuversichtlicher sein
-# als eine Fortschreibung der alten Rolle.
-KATEGORIE_ROLLEN = {
-    1: {"gesetzt": 0.88, "Rotation": 0.09, "geteilt": 0.02, "Rand": 0.01},
-    2: {"gesetzt": 0.72, "Rotation": 0.20, "geteilt": 0.06, "Rand": 0.02},
-    3: {"gesetzt": 0.45, "Rotation": 0.31, "geteilt": 0.18, "Rand": 0.06},
-    4: {"gesetzt": 0.20, "Rotation": 0.30, "geteilt": 0.30, "Rand": 0.20},
-    5: {"gesetzt": 0.04, "Rotation": 0.10, "geteilt": 0.20, "Rand": 0.66},
-}
-
-# Verfuegbarkeit aus history.json: Beta-Schrumpfung der Verletzungsquote gegen
-# einen milden Prior (~2 % bei leerer Historie), damit ein Jahr Beobachtung
-# nicht ueberinterpretiert wird. Sie wirkt auf die **Rollenwahrscheinlichkeit**
-# und nicht auf die Punkte: eine Verletzung sagt nichts darueber, wie viele
-# Punkte jemand pro Einsatz holt, sondern ob er auf dem Platz steht.
-A_VERF, B_VERF = 10.0, 100.0
-VERLETZT_FAKTOR = 0.6
-
-
-def _z_dict(werte: dict[str, float]) -> dict[str, float]:
-    v = np.array(list(werte.values()), dtype=float)
-    m, s = float(v.mean()), float(v.std())
-    return {k: (x - m) / s if s > 1e-9 else 0.0 for k, x in werte.items()}
-
-
-def _kon_zielsaison(liga: str = "1") -> dict:
-    """Teamkontext der Zielsaison aus data/ratings.json.
-
-    ratings.json traegt bereits alles, was vor Saisonstart ueber die Teams
-    bekannt ist — Vorsaison, Carryover der Aufsteiger, Marktquoten-Prior. Die
-    Skala ist dieselbe wie in team_niveaus (mu + att), z-standardisiert ist
-    der Unterschied ohnehin weg.
-    """
-    with open(LEGACY_DIR / "ratings.json", encoding="utf-8") as f:
-        teams = json.load(f)["leagues"][liga]["teams"]
-    za = _z_dict({t: v["att"] for t, v in teams.items()})
-    zd = _z_dict({t: v["def"] for t, v in teams.items()})
-    return {t: {"feld": za[t], TW: -zd[t]} for t in teams}
-
-
-def _verfuegbarkeit() -> dict[int, tuple[float, bool]]:
-    """(Faktor, heute verletzt?) je Spieler aus der Verletzungs-Historie.
-
-    ``st`` ist eine Stufenfunktion aus Wechselpunkten [tag, code]; ein Status
-    gilt bis zum naechsten Eintrag bzw. bis zum Ende des beobachteten
-    Fensters (der dt-Spanne der Marktwerte). Codes 1 (verletzt) und 4 (Reha)
-    zaehlen als Ausfall; 2 (angeschlagen) und 3 (gesperrt) nicht — wer
-    angeschlagen ist, spielt meist, und Sperren sind kurz.
-    """
-    pfad = LEGACY_DIR / "history.json"
-    if not pfad.exists():
-        return {}
-    with open(pfad, encoding="utf-8") as f:
-        spieler = json.load(f)["players"]
-    out = {}
-    for pid, e in spieler.items():
-        dt, st = e.get("dt") or [], e.get("st") or []
-        if not dt:
-            continue
-        ende = dt[-1]
-        beob = max(ende - dt[0] + 1, 1)
-        verletzt = 0
-        for i, (tag, code) in enumerate(st):
-            bis = st[i + 1][0] if i + 1 < len(st) else ende
-            if code in (1, 4):
-                verletzt += max(bis - tag, 0)
-        quote = (verletzt + A_VERF) / (beob + A_VERF + B_VERF)
-        akut = bool(st) and st[-1][1] in (1, 4)
-        out[int(pid)] = (1.0 - quote, akut)
-    return out
-
-
-# Niveauversatz fuer die Spieler, von denen die Kaderpflege sagt, dass sie
-# spielen (Kategorie 1-2). Er wird **abgezogen**, die Werte sind negativ: das
-# Modell liegt fuer diese Gruppe zu tief.
-#
-# Der Grund ist Bauart, nicht Fehler. ``xp_erwartet`` wiegt die Rolle mit ihrer
-# Wahrscheinlichkeit — ueber alle Kandidaten gemittelt ist das richtig, und auf
-# der eigenen Bewertungsmenge ist das Modell in den drei juengsten Saisons
-# praktisch unverzerrt (+1,5 / +2,3 / +0,2). Bedingt darauf, dass ein Spieler
-# **tatsaechlich** gesetzt ist, ist es dagegen systematisch zu tief: gemessen
-# -6,3 (t = -3,3) auf 1.541 Spielersaisons. Dieselbe Gruppe nach Ausgang
-# getrennt zeigt, warum: wer sich durchsetzt, wird um 8 unterschaetzt, wer
-# nicht, um 19 ueberschaetzt.
-#
-# Genau nach der ersten Gruppe fragt der Kaderbau — und die Kaderpflege nennt
-# sie vorab. Deshalb greift der Versatz **nur** bei Kategorie 1-2; auf den
-# uebrigen Export waere er falsch herum.
-#
-# Messaufbau: walk-forward, Zielsaisons 2019-2025, bewertet auf Spielern mit
-# mindestens VERSATZ_MIN_ST Hinrunden-Startelfeinsaetzen und >= 60 Minuten je
-# Einsatz, Versatz je Fall aus den Out-of-fold-Resten aller frueheren Saisons.
-# Danach: Verzerrung +1,2 (t = +0,6) statt -6,3, r 0,628 statt 0,623,
-# MAE 19,8 statt 20,0. Mit ``--versatz`` neu zu messen.
-VERSATZ = {"a": -3.5, "b": -14.1, "c": -11.6}
-VERSATZ_MIN_ST = 10
-VERSATZ_KATEGORIEN = (1.0, 2.0)
-
-# Ab dieser Vorsaison-Startquote gilt ein Spieler als damals gesetzt. Trennt
-# Fall a von Fall b; 0,60 liegt in der flachen Mitte der Rollen-Grenzen.
-VERSATZ_STARTQUOTE = 0.60
-
-
-def versatz_fall(hat_v1, startquote_v1) -> np.ndarray:
-    """Drei Faelle aus dem, was vor der Saison ueber einen Spieler bekannt ist.
-
-    a: Vorsaison in der Liga und dort gesetzt. b: Vorsaison ja, gesetzt nein.
-    c: keine Vorsaison. Der Versatz ist in b und c drei- bis viermal so gross
-    wie in a — wer neu ist oder die Rolle wechselt, wird am staerksten
-    unterschaetzt.
-    """
-    hat = np.asarray(pd.Series(hat_v1).fillna(0.0), dtype=float)
-    sq = np.asarray(pd.Series(startquote_v1).fillna(0.0), dtype=float)
-    return np.where(hat == 0, "c", np.where(sq >= VERSATZ_STARTQUOTE, "a", "b"))
-
-
-def versatz_messen(rows: pd.DataFrame) -> dict:
-    """VERSATZ aus Backtest-Zeilen neu bestimmen — die Konstante gegenpruefen.
-
-    Gemittelt wird ueber **Saisons**, nicht ueber Zeilen: die Spieler einer
-    Saison teilen sich ihr Kohortenglueck, und wer Zeilen zaehlt, findet
-    ueberall Signifikanz.
-    """
-    g = rows.dropna(subset=["xp_dach", "ist_avg"])
-    g = g[(g.ist_st >= VERSATZ_MIN_ST) & (g.ist_minje >= 60)].copy()
-    g["fall"] = versatz_fall(g.hat_v1, g.startquote_v1)
-    g["res"] = g.xp_dach - g.ist_avg
-    return {f: round(float(s.groupby("saison").res.mean().mean()), 1)
-            for f, s in g.groupby("fall")}
-
-
-def export(path: Path | None = None) -> dict:
-    """Prognose je Kaderspieler der laufenden Bundesliga-Saison schreiben.
-
-    Bewusst NICHT in fetch.py ratings eingehaengt: CLAUDE.md garantiert, dass
-    ratings.json ohne die Parquet-Dateien baubar ist — dieses Modell braucht
-    panel.parquet und tm_players.csv zwingend. Eigenes Kommando, und die
-    Seite behandelt die Datei als optional.
-    """
-    with open(LEGACY_DIR / "data_1.json", encoding="utf-8") as f:
-        kader = json.load(f)
-
-    # Die gepflegte Formation beschreibt die aktuelle Rolle genauer als die
-    # TM-Nominalposition (z. B. Moreira: ZOM statt Linksaußen). Sie muss vor
-    # der Qualitätsprognose greifen, nicht erst beim Kategorie-Export.
-    fp = pd.read_csv(MANUAL / "fine_positions.csv")
-
-    panel = lade_panel()
-    saison = max(panel.season.unique())
-    matches = pd.read_parquet(PROCESSED / "matches.parquet")
-    hist_panel = panel[panel.season < saison]
-    hist_matches = matches[matches.season < saison]
-
-    ss = spieler_saisons(hist_panel)
-    kon = kontext_tabelle(team_niveaus(conceded_from_panel(hist_panel, hist_matches)),
-                          sorted(ss.season.unique()))
-    for team, e in _kon_zielsaison("1").items():
-        kon[(saison, team)] = e
-    tm = tm_je_spieler(lade_tm())
-
-    pos_override = dict(zip(
-        fp.loc[(fp.season == saison) & fp.player_id.notna(), "player_id"].astype(int),
-        fp.loc[(fp.season == saison) & fp.player_id.notna(), "position_fine"]))
-    kandidaten = pd.DataFrame([
-        {"player_id": int(p["id"]), "team_id": str(p["team_id"]),
-         "kb_id": str(p["id"]), "name": p["name"], "kb_pos": p.get("position"),
-         "pos_override": pos_override.get(int(p["id"]))}
-        for p in kader["players"]])
-    df = merkmalszeilen(
-        saison, kandidaten[["player_id", "team_id", "pos_override"]], ss, kon, tm,
-                        DELTA, K_MIX, False, False, None, BL2_GEWICHT, K_TW)
-    tab = df.attrs["rollen_tabelle"]   # ein merge verwirft attrs
-    qtab = df.attrs["quoten_tabelle"]
-    uebg = df.attrs["uebergaenge"]
-    df = kandidaten.merge(df, on=["player_id", "team_id"])
-    # Kickbase kennt die Position auch ohne TM-Zeile — fuers TW-Handling
-    # genuegt sie (Kickbase-Position 1 = Torwart).
-    df.loc[(df.pos == POS_UNBEKANNT) & (df.kb_pos == 1), "pos"] = TW
-
-    # Kalibrierung auf allen historischen Zielsaisons — dieselben Fits wie im
-    # Backtest, nur ohne dessen letzte Zurueckhaltung (alle Saisons duerfen
-    # ins Training, die Zielsaison liegt ohnehin in der Zukunft).
-    rows = backtest_p90(nur_kalibrierzeilen=True)
-    feld = rows[(rows.pos != TW) & (rows.jahr_min >= MIN_TRAIN)
-                & rows.jahr_p90.notna()]
-    fit_p = _ridge(feld[MERKMALE].values.astype(float),
-                   (feld.jahr_p90 - feld.p90_mix).values.astype(float),
-                   feld.jahr_min.values.astype(float), LAMBDA_B)
-    df["p90_dach"] = df.p90_mix
-    sel = (df.pos != TW).values
-    df.loc[sel, "p90_dach"] = df.loc[sel, "p90_mix"] + _ridge_pred(
-        fit_p, df.loc[sel, MERKMALE].values.astype(float))
-
-    # Rollen-Logistik auf allen historischen Zielsaisons.
-    voll = backtest_p90()
-    tr_r = voll[voll.ist_startquote.notna()]
-    zs = sorted(tr_r.saison.unique())
-    rang = {x: i for i, x in enumerate(zs)}
-    w_r = DELTA_ROLLE ** (len(zs) - tr_r.saison.map(rang).values - 1)
-    fit_r = _logit(tr_r[ROLLE_MERKMALE].values.astype(float),
-                   tr_r.ist_gesetzt.values.astype(float), w_r)
-    letzte = tr_r[tr_r.saison == zs[-1]]
-    p_l = _logit_pred(fit_r, letzte[ROLLE_MERKMALE].values.astype(float))
-    versatz = 0.0
-    for _ in range(40):
-        q = 1 / (1 + np.exp(-(np.log(p_l / (1 - p_l)) + versatz)))
-        if abs(q.mean() - letzte.ist_gesetzt.mean()) < 1e-4:
-            break
-        versatz += (letzte.ist_gesetzt.mean() - q.mean()) * 4.0
-    fit_r["beta"][0] += versatz
-    fak = streuungs_faktoren(voll)
-
-    # --- Zielsaison: die handgepflegte Rolle tritt an die Stelle der
-    # Vorsaison-Rolle. Das ist der Punkt, an dem die Kaderpflege wirkt —
-    # gemessen ist perfekte Rollenkenntnis den Sprung von r 0,606 auf 0,779
-    # wert, und die schwaechste Gruppe (ohne jede Historie) steigt von 0,37
-    # auf 0,72.
-    fp = fp[(fp.season == saison) & fp.player_id.notna()]
-    kat = dict(zip(fp.player_id.astype(int), fp.kategorie))
-    df["kategorie"] = [kat.get(pid) for pid in df.player_id]
-    df["quellen"] = [["hist"] if n > 0 else ["baseline"] for n in df.n_eff.fillna(0)]
-
-    # Schritt 1: die Kategorie setzt nur noch die **Basisrate** und damit die
-    # Form der Rollenverteilung. Die Minuten folgen erst in Schritt 3, wenn
-    # die Logistik gesagt hat, wie sicher *dieser* Spieler sie haelt.
-    rollen_form, p_basis = [], []
-    for i, pid in enumerate(df.player_id):
-        k = kat.get(pid)
-        vert = KATEGORIE_ROLLEN.get(int(k)) if k is not None else None
-        if vert is None:
-            rollen_form.append(rollen_verteilung(uebg, df.at[i, "zielrolle"]))
-            p_basis.append(df.at[i, "p_basis"])
-            continue
-        rollen_form.append(dict(vert))
-        p_basis.append(vert["gesetzt"])
-        df.at[i, "quellen"] = df.at[i, "quellen"] + ["kategorie"]
-    df["p_basis"] = np.clip(p_basis, 0.01, 0.99)
-    df["p_basis_logit"] = np.log(df.p_basis / (1 - df.p_basis))
-
-    # Schritt 2: Rollenwahrscheinlichkeit je Spieler.
-    df["p_rolle"] = np.clip(_logit_pred(
-        fit_r, df[ROLLE_MERKMALE].values.astype(float)), 0.005, 0.995)
-
-    # Die Kategorie setzt die Basisrate, das Modell verfeinert **innerhalb**.
-    # Das ist die Arbeitsteilung, die die Messung nahelegt: die Kaderpflege
-    # weiss, wer um welche Rolle konkurriert (und kennt Transfers), das Modell
-    # trennt innerhalb einer Kategorie die Sicheren von den Wackligen — im
-    # Backtest von 9,1 % bis 33,2 % Durchsetzung. Ohne diese Eichung traegt
-    # die Logistik das Niveau der historischen Vorjahres-Rollen, und ein
-    # gepflegter Stammspieler erschiene mit 25 % Startplatzchance.
-    for k, vert in KATEGORIE_ROLLEN.items():
-        sel = (df.kategorie == k).values
-        if sel.sum() < 5:
-            continue
-        p = df.loc[sel, "p_rolle"].values
-        lo = np.log(p / (1 - p))
-        versatz = 0.0
-        for _ in range(60):
-            q = 1 / (1 + np.exp(-(lo + versatz)))
-            if abs(q.mean() - vert["gesetzt"]) < 1e-4:
-                break
-            versatz += (vert["gesetzt"] - q.mean()) * 4.0
-        df.loc[sel, "p_rolle"] = np.clip(
-            1 / (1 + np.exp(-(lo + versatz))), 0.005, 0.995)
-
-    # Verletzungshistorie: sie senkt die Rollenwahrscheinlichkeit, nicht den
-    # Ertrag je Einsatz.
-    verf = _verfuegbarkeit()
-    for i, pid in enumerate(df.player_id):
-        v = verf.get(pid)
-        if v is None:
-            continue
-        faktor, akut = v
-        if akut:
-            faktor *= VERLETZT_FAKTOR
-            df.at[i, "quellen"] = df.at[i, "quellen"] + ["verletzt"]
-        df.at[i, "p_rolle"] = df.at[i, "p_rolle"] * faktor
-
-    # Schritt 3: dieselbe Eichung wie im Backtest — die Kategorie gibt die Form
-    # der Verteilung, die Logistik ihre Masse auf "gesetzt". Erst dadurch
-    # unterscheidet sich der sichere Kategorie-1-Spieler vom wackligen: beide
-    # haetten sonst dieselbe Einsatzlaenge bekommen.
-    vert_k = [verteilung_kalibriert_form(form, pr)
-              for form, pr in zip(rollen_form, df.p_rolle)]
-    df["minje_rolle"] = [minje_aus_verteilung(tab, v, p)
-                         for v, p in zip(vert_k, df.pos)]
-    df["quote_rolle"] = [quote_aus_verteilung(qtab, v) for v in vert_k]
-    w_rolle = K_MINJE / (df.n_eins_eff.fillna(0.0) + K_MINJE)
-    df["minje_dach_neu"] = (w_rolle * df.minje_rolle
-                            + (1 - w_rolle) * df.minje_hist.fillna(df.minje_rolle))
-
-    # Die Einsatzlaenge bei gehaltener Rolle darf nie unter der erwarteten
-    # liegen. Seit die Verteilung an p_rolle geeicht wird, kann sie das: wer
-    # laenger spielt als die Zellennorm seiner Position (Kleindienst 88 Min
-    # gegen ST-gesetzt 80,3), bekaeme sonst ein "Potenzial" unter seiner
-    # eigenen Erwartung. Die Zelle ist eine Norm, kein Deckel.
-    df["minje_gesetzt"] = np.maximum(df.minje_gesetzt, df.minje_dach_neu)
-
-    df["xp_rolle"] = df.p90_dach * df.minje_dach_neu / 90.0
-    df["xp_dach"] = df.xp_rolle
-    df["xp_gesetzt"] = df.xp_dach + df.p90_dach * (
-        df.minje_gesetzt - df.minje_dach_neu) / 90.0
-
-    # Eichung auf die Spieler, von denen die Kaderpflege sagt, dass sie spielen
-    # (Begruendung und Messaufbau bei VERSATZ). Beide Zahlen wandern gleich
-    # weit, damit ihr Abstand — das Aufwaertspotenzial — unberuehrt bleibt.
-    ist_kat12 = df.kategorie.isin(VERSATZ_KATEGORIEN)
-    versatz = pd.Series(versatz_fall(df.hat_v1, df.startquote_v1),
-                        index=df.index).map(VERSATZ).astype(float).fillna(0.0)
-    versatz = versatz.where(ist_kat12, 0.0)
-    df["xp_dach"] = df.xp_dach - versatz
-    df["xp_gesetzt"] = df.xp_gesetzt - versatz
-    df["versatz"] = versatz
-
-    df["streuung"] = [streuung_fuer(fak, n, p)
-                      for n, p in zip(df.n_eff.fillna(0.0), df.pos)]
-    sd_ref = float(min(fak["global"] * b * o
-                       for b in fak["belegt"].values()
-                       for o in fak["pos"].values()))
-    # Sicherheit fuer die Punktgroesse: wie verlaesslich ist die Zahl? Zwei
-    # dimensionslose Faktoren — wie sicher der Spieler ueberhaupt spielt, und
-    # wie eng das Ergebnis um die Prognose streut.
-    df["sicherheit"] = np.clip(df.quote_rolle * (sd_ref / df.streuung), 0.0, 1.0)
-
-    splits = load_splits()
-    hin_spieltage = splits.get((saison, "Bundesliga"), 17)
-    # Erwartete Einsaetze aus der **Einsatzquote**, nicht aus P(gesetzt):
-    # letztere fragt, ob jemand ueber 80 % der Spiele beginnt, und das ist
-    # eine viel strengere Huerde als ueberhaupt zu spielen.
-    df["einsaetze_erwartet"] = df.quote_rolle.clip(0.0, 1.0) * hin_spieltage
-
-    # Kategorie 5 wird nicht prognostiziert. Das ist keine Sparsamkeit,
-    # sondern die ehrliche Antwort auf eine Frage, die das Modell nicht
-    # beantworten kann: ein Reservist spielt im Normalfall nicht, ein
-    # verschwindend kleiner Teil bricht durch — aber *welcher*, weiss niemand
-    # vorab. Ihnen allen ein paar Punkte zuzuschreiben (im Lauf davor im
-    # Schnitt 51,5 bei 6,5 erwarteten Einsaetzen) erzeugt eine Zahl, wo keine
-    # Information ist, und drueckt zugleich jede Kennzahl, die ueber den
-    # ganzen Kader gemittelt wird: ein Drittel des Exports bestand aus ihnen.
-    #
-    # Wer ohne Kategorie in der Kaderpflege fehlt, bleibt drin — nicht
-    # eingetragen heisst nicht "Reserve".
-    vorher = len(df)
-    df = df[df.kategorie.isna() | (df.kategorie != 5)].reset_index(drop=True)
-    ohne_k5 = vorher - len(df)
-
-    payload = {
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "model": "avg-je-einsatz-v2",
-        "season": saison,
-        "liga": "1",
-        "hinrunden_spieltage": hin_spieltage,
-        "params": {"k": K_MIX, "k_tw": K_TW, "delta": DELTA,
-                   "bl2_gewicht": BL2_GEWICHT, "kappa_bl2": KAPPA_BL2,
-                   "k_minje": K_MINJE, "delta_rolle": DELTA_ROLLE,
-                   "lambda": LAMBDA_B, "sd_ref": round(sd_ref, 2),
-                   "kategorie_rollen": KATEGORIE_ROLLEN},
-        "ohne_prognose": {"kategorie_5": ohne_k5},
-        "players": {
-            r.kb_id: {
-                "name": r.name,
-                "team_id": r.team_id,
-                "pos": r.pos,
-                "kategorie": None if pd.isna(r.kategorie) else int(r.kategorie),
-                "p90": round(float(r.p90_dach), 1),
-                "minje": round(float(r.minje_dach_neu), 1),
-                "xp_erwartet": round(float(r.xp_dach), 1),
-                "xp_gesetzt": round(float(r.xp_gesetzt), 1),
-                "p_rolle": round(float(r.p_rolle), 3),
-                "einsaetze_erwartet": round(float(r.einsaetze_erwartet), 1),
-                "streuung": round(float(r.streuung), 1),
-                "sicherheit": round(float(r.sicherheit), 3),
-                "n_eff": round(float(r.n_eff) if pd.notna(r.n_eff) else 0.0, 1),
-                "quellen": list(r.quellen),
-            } for r in df.itertuples(index=False)
-        },
-    }
-    target = path or (LEGACY_DIR / "player_projections.json")
-    atomic_write_json(target, payload)
-    return payload
-
-
 def _cli() -> None:
-    # Die Windows-Konsole liefert cp1252 - an "Pavlović" scheitert sonst die
-    # Ausgabe, nicht die Rechnung. Die JSON-Datei ist davon unberuehrt.
+    """Walk-forward-Auswertungen des Forschungsmodells ausführen."""
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except AttributeError:
         pass
     args = sys.argv[1:]
 
+    if "--backtest" not in args:
+        raise SystemExit(
+            "Dieses Forschungsmodell exportiert keine Live-Datei mehr. "
+            "Nutze --backtest oder src.model.player_benchmark."
+        )
+
     def _wert(name: str, default: float) -> float:
         return float(args[args.index(name) + 1]) if name in args else default
 
-    if "--versatz" in args:
-        gemessen = versatz_messen(backtest_p90())
-        print("VERSATZ neu gemessen (gesetzte Spieler, walk-forward):")
-        for f in ("a", "b", "c"):
-            print(f"  Fall {f}: {gemessen.get(f, float('nan')):+6.1f}   "
-                  f"im Code: {VERSATZ.get(f, 0.0):+6.1f}")
-        return
-
-    if "--backtest" in args:
-        rows = backtest_p90(
-            delta=_wert("--delta", DELTA), k_mix=_wert("--k", K_MIX),
-            pool_bl2="--pool-bl2" in args,
-            ohne_teamstaerke="--ohne-teamstaerke" in args,
-            mit_vorgaenger="--vorgaenger" in args,
-            nur_mix="--nur-mix" in args,
-            bl2_gewicht=_wert("--bl2-gewicht", BL2_GEWICHT),
-            k_tw=_wert("--k-tw", K_TW),
-            orakel="--orakel" in args)
-        report_ertrag(rows)
-        report_rolle(rows)
-        report_streuung(rows)
-        report_p90(rows)
-        report_produkt(rows)
-        report_oekonomie(rows)
-        return
-
-    payload = export()
-    spieler = payload["players"]
-    mit_kat = sum(1 for p in spieler.values() if "kategorie" in p["quellen"])
-    ohne_hist = sum(1 for p in spieler.values() if "baseline" in p["quellen"])
-    print(f"{len(spieler)} Spieler, Saison {payload['season']}, "
-          f"{payload['hinrunden_spieltage']} Hinrunden-Spieltage")
-    print(f"  {mit_kat} mit gepflegter Rolle, {ohne_hist} ohne eigene Historie")
-    k5 = payload.get("ohne_prognose", {}).get("kategorie_5", 0)
-    print(f"  {k5} Spieler der Kategorie 5 ohne Prognose — wer normalerweise")
-    print("  nicht spielt, bekommt keine Zahl; welcher davon durchbricht, ist")
-    print("  vorab nicht bekannt.")
-    print("  Rolle bekannt zu haben ist gemessen den Sprung r 0,618 -> 0,779 wert;")
-    print("  wie viel die Pflege davon einloest, zeigt erst die laufende Saison.")
-    top = sorted(spieler.items(), key=lambda kv: -kv[1]["xp_erwartet"])[:10]
-    print("  Top 10 nach erwarteten Oe Punkten je Einsatz:")
-    for _, p in top:
-        print(f"    {p['name']:18s} {p['pos']:3s} Oe {p['xp_erwartet']:6.1f}  "
-              f"(gesetzt {p['xp_gesetzt']:6.1f})  P(Rolle) {p['p_rolle']*100:4.0f}%"
-              f"  +/-{p['streuung']:4.1f}")
-    print(f"geschrieben: {LEGACY_DIR / 'player_projections.json'}")
+    rows = backtest_p90(
+        delta=_wert("--delta", DELTA), k_mix=_wert("--k", K_MIX),
+        pool_bl2="--pool-bl2" in args,
+        ohne_teamstaerke="--ohne-teamstaerke" in args,
+        mit_vorgaenger="--vorgaenger" in args,
+        nur_mix="--nur-mix" in args,
+        bl2_gewicht=_wert("--bl2-gewicht", BL2_GEWICHT),
+        k_tw=_wert("--k-tw", K_TW),
+        orakel="--orakel" in args)
+    report_ertrag(rows)
+    report_rolle(rows)
+    report_streuung(rows)
+    report_p90(rows)
+    report_produkt(rows)
+    report_oekonomie(rows)
 
 
 if __name__ == "__main__":

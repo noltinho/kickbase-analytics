@@ -92,13 +92,13 @@
   .controls-grid {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
   }
 
   .controls-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px 20px;
+    gap: 12px;
     align-items: flex-end;
   }
 
@@ -107,6 +107,7 @@
   }
 
   .position-filter { flex: 0 0 310px; }
+  .season-filter   { flex: 0 0 168px; }
   .apps-filter     { flex: 0 0 116px; }
   .market-filter   { flex: 0 0 168px; }
   .player-filter   { flex: 0 0 210px; }
@@ -119,16 +120,16 @@
     justify-content: space-between;
     gap: 6px;
     font-family: 'DM Mono', monospace;
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 5px;
+    margin-bottom: 6px;
   }
 
   .btn-group {
     display: flex;
-    gap: 4px;
+    gap: 6px;
   }
 
   .position-filter .btn-group {
@@ -143,15 +144,15 @@
     border: 1px solid var(--border);
     color: var(--muted);
     font-family: 'DM Mono', monospace;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 1px;
     text-transform: uppercase;
-    padding: 6px 10px;
+    padding: 10px 14px;
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
-    min-height: 32px;
+    min-height: 40px;
   }
 
   .btn:hover:not(.active) { color: var(--text); border-color: var(--accent); }
@@ -168,11 +169,34 @@
     font-weight: 500;
   }
 
+  .filter-select {
+    width: 100%;
+    min-height: 40px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    padding: 9px 32px 9px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237e8187'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+  }
+
+  .filter-select:hover,
+  .filter-select:focus { border-color: var(--accent); }
+  .filter-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .filter-select:disabled { cursor: wait; opacity: .65; }
+
   .mv-range {
     display: flex;
     align-items: center;
     gap: 6px;
-    min-height: 32px;
+    min-height: 40px;
   }
 
   .mv-range input {
@@ -180,10 +204,10 @@
     border: 1px solid var(--border);
     color: var(--text);
     font-family: 'DM Mono', monospace;
-    font-size: 11px;
+    font-size: 13px;
     width: 64px;
     min-width: 0;
-    padding: 6px 8px;
+    padding: 9px 10px;
     border-radius: 6px;
     outline: none;
     text-align: center;
@@ -217,11 +241,11 @@
     background: transparent;
     border: none;
     color: var(--text);
-    font-family: 'DM Mono', monospace;
-    font-size: 11px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
     width: 100%;
     min-width: 0;
-    padding: 6px 0;
+    padding: 9px 0;
     text-align: left;
     outline: none;
   }
@@ -472,9 +496,9 @@
     .position-filter,
     .market-filter,
     .player-filter { grid-column: 1 / -1; }
-    .position-filter, .apps-filter, .market-filter,
+    .position-filter, .season-filter, .apps-filter, .market-filter,
     .player-filter, .team-filter, .cleaned-filter { width: auto; }
-    .mv-range input, .search-wrap { min-height: 44px; }
+    .mv-range input, .search-wrap, .filter-select { min-height: 44px; }
     .team-panel { max-height: 176px; }
     .chart-wrap { flex: none; height: 60vh; min-height: 420px; }
   }
@@ -497,6 +521,10 @@
   <section class="controls" aria-label="Diagrammfilter">
     <div class="controls-grid">
       <div class="controls-row">
+        <div class="filter-block season-filter">
+          <label class="filter-label" for="filter-season">Saison</label>
+          <select class="filter-select" id="filter-season" onchange="changeSeason()"></select>
+        </div>
         <div class="filter-block position-filter">
           <span class="filter-label">Position</span>
           <div class="btn-group" role="group" aria-label="Positionen">
@@ -574,18 +602,37 @@ const TREND_LABEL    = { 0: '=', 1: '↓', 2: '↑' };
 const SYMBOL         = { 'Bundesliga': 'circle', '2. Bundesliga': 'diamond' };
 
 const liga    = localStorage.getItem('kickbase_liga') || '1';
-/* Diese Seite hat kein Saison-Feld. Sie las früher den gemeinsamen Schlüssel
-   der anderen Tools mit; seit die Saisonwahl je Seite gespeichert wird, gibt es
-   den nicht mehr zu erben. Bleibt der Parameter aus der URL — sonst die
-   laufende Saison. */
-const season  = new URLSearchParams(location.search).get('season') || '';
+const SEASON_STORAGE_KEY = 'kickbase_season_scatter';
+let season = new URLSearchParams(location.search).get('season')
+          || localStorage.getItem(SEASON_STORAGE_KEY)
+          || '';
 /* Saison-Manifest: data/seasons.json ist die einzige Stelle, an der eine
    Saison eingetragen wird — fetch.py und alle Seiten lesen sie. Der leere
    Schlüssel '' meint die laufende Saison (Dateien ohne Suffix). */
 let SEASONS = null;
+let dataRequestId = 0;
 function seasonInfo(key) {
   return SEASONS.seasons.find(s => s.key === key)
       || SEASONS.seasons.find(s => s.key === SEASONS.current);
+}
+function normalizeSeason(key) {
+  return SEASONS.seasons.some(s => s.key === key) ? key : SEASONS.current;
+}
+function fillSeasonSelect() {
+  const select = document.getElementById('filter-season');
+  select.innerHTML = SEASONS.seasons.map(s =>
+    `<option value="${s.key}">Saison ${s.label}</option>`
+  ).join('');
+  select.value = season;
+}
+function rememberSeason() {
+  try { localStorage.setItem(SEASON_STORAGE_KEY, season); } catch (e) { /* optional */ }
+  try {
+    const url = new URL(location.href);
+    if (season === SEASONS.current) url.searchParams.delete('season');
+    else url.searchParams.set('season', season);
+    history.replaceState(null, '', url);
+  } catch (e) { /* file:// oder eingeschränkter Browser-Kontext */ }
 }
 const COMP_NAME = { '1': 'Bundesliga', '2': '2. Bundesliga' };
 
@@ -944,6 +991,7 @@ function render() {
 
 // ─── Event-Handler ─────────────────────────────────────────
 function setX(mode) {
+  if (mode === 'avgm' && document.getElementById('btn-avgm').hidden) return;
   xMode = mode;
   for (const [id, m] of [['btn-avg', 'avg'], ['btn-total', 'total'],
                          ['btn-avgm', 'avgm']]) {
@@ -988,6 +1036,12 @@ function setMv() {
 function setSearch() {
   searchQuery = document.getElementById('search-input').value.trim().toLowerCase();
   render();
+}
+
+function changeSeason() {
+  season = normalizeSeason(document.getElementById('filter-season').value);
+  rememberSeason();
+  loadSeasonData().catch(showLoadError);
 }
 
 function updateSearchPanel(players, combined, reg) {
@@ -1113,9 +1167,10 @@ function updateTeamTrigger() {
 /* Prognose nachladen — bewusst nach dem ersten render(): fehlt die Datei
    oder passt sie nicht zur gewählten Saison/Liga, bleibt die Seite unverändert
    und der zugehörige Knopf einfach aus. */
-function attachProjections() {
-  if (season && season !== SEASONS.current) return;
-  return ladeAvgModell().then(() => {
+function attachProjections(requestId) {
+  if (season !== SEASONS.current || requestId !== dataRequestId) return;
+  return ladeAvgModell(requestId).then(() => {
+    if (requestId !== dataRequestId || season !== SEASONS.current) return;
     /* Vor dem ersten Spieltag trägt data_1.json zwar alle 34 Spieltage, aber
        überall 0 Punkte und "0'" Minuten — jeder Spieler landet bei 0 Einsätzen
        und fällt durch den Einsatz-Filter. Die Ø-Achse ist dann leer, und Plotly
@@ -1130,14 +1185,15 @@ function attachProjections() {
 }
 
 /* Das fallweise Modell ist die bedingte Produktionsprognose für Kategorie 1–2. */
-function ladeAvgModell() {
+function ladeAvgModell(requestId) {
   const datei = liga === '1'
     ? 'data/player_projections_avg.json'
     : `data/player_projections_avg_${liga}.json`;
   return fetch(datei)
     .then(r => r.ok ? r.json() : null)
     .then(doc => {
-      if (!doc || !doc.players || doc.liga !== liga) return;
+      if (requestId !== dataRequestId || season !== SEASONS.current
+          || !doc || !doc.players || doc.liga !== liga) return;
       let treffer = 0;
       ALL_PLAYERS.forEach(p => {
         const e = doc.players[p.id];
@@ -1149,32 +1205,48 @@ function ladeAvgModell() {
 }
 
 // ─── Daten laden ───────────────────────────────────────────
-fetch('data/seasons.json')
-  .then(r => {
-    if (!r.ok) throw new Error(`data/seasons.json: HTTP ${r.status}`);
-    return r.json();
-  })
-  .then(manifest => {
-    SEASONS = manifest;
-    return fetch(`data/data_${liga}${seasonInfo(season).suffix}.json`);
-  })
-  .then(r => {
-    if (!r.ok) throw new Error(`Saisondaten: HTTP ${r.status}`);
-    return r.json();
-  })
-  .then(data => {
+async function loadSeasonData() {
+  const requestId = ++dataRequestId;
+  const select = document.getElementById('filter-season');
+  select.disabled = true;
+  document.getElementById('btn-avgm').hidden = true;
+
+  try {
+    const response = await fetch(`data/data_${liga}${seasonInfo(season).suffix}.json`);
+    if (!response.ok) throw new Error(`Saisondaten: HTTP ${response.status}`);
+    const data = await response.json();
+    if (requestId !== dataRequestId) return;
+
+    const leftProjectionMode = xMode === 'avgm';
     defaultMinApps = KickbaseUtils.defaultMinAppearances(data.players);
     minApps = defaultMinApps;
     document.getElementById('min-apps').value = defaultMinApps;
     ALL_PLAYERS = processPlayers(data, COMP_NAME[liga]);
     buildTeamButtons();
     buildCleanedList();
-    render();
-    return attachProjections();
-  }).catch(err => {
-    document.getElementById('chart').innerHTML =
-      `<p class="error">Fehler beim Laden der Daten: ${err.message}</p>`;
-  });
+    if (leftProjectionMode) setX('avg');
+    else render();
+    await attachProjections(requestId);
+  } finally {
+    if (requestId === dataRequestId) select.disabled = false;
+  }
+}
+
+function showLoadError(err) {
+  document.getElementById('chart').innerHTML =
+    `<p class="error">Fehler beim Laden der Daten: ${err.message}</p>`;
+}
+
+async function init() {
+  const response = await fetch('data/seasons.json');
+  if (!response.ok) throw new Error(`data/seasons.json: HTTP ${response.status}`);
+  SEASONS = await response.json();
+  season = normalizeSeason(season);
+  fillSeasonSelect();
+  await loadSeasonData();
+}
+
+init().catch(showLoadError);
 </script>
 </body>
 </html>

@@ -35,6 +35,21 @@ python -m src.model.player_benchmark
 | robustes Gradient Boosting | 0,664 | 17,11 | +1,34 | 1,006 |
 | Rollenmodell `xp_gesetzt` | 0,672 | 17,46 | +2,87 | 0,818 |
 | eigene Historie roh | 0,651 | 18,41 | +3,34 | 0,665 |
+| nur Marktwert und Position | 0,554 | 19,28 | +1,84 | 1,006 |
+
+Die Zeile `nur Marktwert und Position` ist die Preisauskunft ohne jede
+eigene Spielerhistorie: eine gewichtete Ridge auf dem logarithmierten
+Marktwert plus Positions- und Fallkategorien, mit derselben
+Niveaukorrektur wie alle Challenger. Sie deckt dieselbe Zielgruppe ab
+wie das Produktionsmodell, der Vergleich ist deshalb direkt: 2,64
+MAE-Punkte Abstand, 95-%-Intervall 2,23 bis 3,00, in 0 von 7
+Zielsaisons vorn. Was der Markt vor der Saison einpreist, ist also
+ein tragfähiges, aber deutlich gröberes Signal als die Historie.
+
+Die naive Vorsaison-Linie fehlt in dieser Tabelle mit Absicht: Sie deckt
+eine kleinere Spielermenge ab, und ein direkter Vergleich der MAE-Spalte
+wäre irreführend. Sie steht unten in [Die naive
+Vergleichslinie](#die-naive-vergleichslinie).
 
 Das fallweise Modell ist damit der beste belegte Produktionsweg für die
 erklärte Frage. Empirisches Bayes ist statistisch nicht sicher schlechter
@@ -42,6 +57,54 @@ erklärte Frage. Empirisches Bayes ist statistisch nicht sicher schlechter
 aber keinen belegten Vorteil. Das Rollenmodell bei gehaltener Rolle liegt um
 0,83 MAE-Punkte zurück; sein Intervall gegenüber dem fallweisen Modell liegt
 mit +0,49 bis +1,19 vollständig über null.
+
+## Die naive Vergleichslinie
+
+Die Tabelle oben vergleicht Modelle miteinander. Die schlichtere Frage lautet,
+ob das Ganze überhaupt gegen die Regel gewinnt, die jeder Mitspieler ohnehin im
+Kopf hat: **Ein Spieler holt nächste Saison den Punkteschnitt je Einsatz, den
+er letzte Saison geholt hat.** Ungewichtet, ein Jahr Rückblick, kein
+Abklingfaktor, keine Niveaukorrektur — der Vorjahreswert wird unverändert als
+Prognose eingesetzt. Sie ist damit bewusst schlechter gestellt als
+`eigene Historie roh`, die drei Saisons einsatzgewichtet zusammenzieht und
+zusätzlich dieselbe Fall-Niveaukorrektur wie alle Challenger erhält. Genau
+darum steht sie als einzige Zeile roh in der Tabelle: Eine Vergleichslinie,
+die erst zurechtgerückt werden muss, ist keine mehr.
+
+Antworten kann die Regel nur, wenn der Spieler in der Vorsaison in derselben
+Liga gespielt hat — 1.189 der 1.571 Starter-Spielersaisons. Die übrigen 382
+sind Aufsteiger, Rückkehrer und Zugänge aus dem Ausland; für sie bleibt die
+Zeile leer, statt eine Zahl zu erfinden.
+
+| Modell | n | MAE | Bias | Kalibrierungssteigung |
+|---|---:|---:|---:|---:|
+| fallweise | 1.571 | 16,64 | +1,36 | 0,922 |
+| eigene Historie roh (gewichtet, korrigiert) | 1.239 | 18,41 | +3,34 | 0,665 |
+| **Vorsaison-Schnitt, ungewichtet und roh** | 1.189 | **20,84** | −3,32 | 0,583 |
+
+Weil die drei Zeilen unterschiedlich viele Spieler abdecken, ist die Differenz
+der MAE-Spalte nicht der Vorsprung. Maßgeblich ist der paarweise Vergleich auf
+den Fällen, zu denen beide etwas sagen: Dort liegt das fallweise Modell **4,40
+MAE-Punkte** vorn, saisongeclustertes 95-%-Intervall 3,17 bis 5,54, und die
+naive Regel gewinnt in **0 von 7** Zielsaisons. Das sind rund 21 Prozent
+weniger Fehler.
+
+Der Vorsprung stammt auch nicht nur aus einer Randgruppe:
+
+| Fall | naiv (n) | fallweise (n) |
+|---|---:|---:|
+| a — eigene Startelfhistorie vorhanden | 19,52 (991) | 16,45 (1011) |
+| b — Historie vorhanden, aber dünn | 27,44 (198) | 15,85 (278) |
+
+Im gut belegten Fall a, wo die naive Regel ihre besten Karten hat, bleiben
+gut drei MAE-Punkte Abstand. Ihre eigentliche Schwäche steht in der
+Bias-Spalte: −3,32 insgesamt und −21,06 im Fall b. Der Vorjahresschnitt je
+Einsatz mischt Kurzeinsätze mit Startelfeinsätzen, und wer letzte Saison
+überwiegend eingewechselt wurde, sieht dort billig aus, obwohl er in der
+Zielsaison gesetzt spielt. Genau diese Verwechslung von Einsatzrolle und
+Punkteertrag ist der Grund, warum das Produktionsmodell auf Startelfschnitte
+statt auf Rohschnitte schaut — und warum Startelfwahrscheinlichkeit als
+getrennte Größe geführt wird.
 
 ## Gemeinsame Informationen, getrennte Modellentscheidungen
 

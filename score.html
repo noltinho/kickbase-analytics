@@ -18,40 +18,27 @@
       --muted:    #7e8187;
       --accent:   #ff4600;
 
-      /* Türkis · Dunkelgrün · Hellgrün · Grau · Orange · Feuerwehrrot · Lila.
-         Die Skala läuft einmal um den Farbkreis statt nur zwischen Rot und
-         Grün zu pendeln — dadurch trennen sich benachbarte Stufen auch dort,
-         wo die Rot-Grün-Achse ausfällt. Lila am unteren Ende ist der Anker:
-         es liegt von allem anderen weit weg.
-
-         Helligkeit und Sättigung sind je Stufe darauf optimiert, die
-         schlechteste aller 21 Paarungen unter simulierter Protanopie und
-         Deuteranopie zu maximieren (Machado-Oliveira-Fernandes, Stärke 1,0,
-         ΔE in OKLab ×100):
-             alt   ΔE  1,0   (−1 gegen −2 praktisch identisch)
-             neu   ΔE 10,5   bei voller Farbsicht 16,7
-         Zielwert der Leitlinie ist 8. Zusätzlich trägt jede Zelle ihre Zahl
-         im Klartext — Farbe ist Verstärkung, nicht der einzige Träger. */
+      /* Ruhige, ordinal lesbare Grün–Grau–Rot-Skala. Jede Zelle trägt den
+         Score zusätzlich als Zahl; Helligkeit und Beschriftung vermitteln
+         die Bedeutung damit nicht ausschließlich über die Farbe. */
 
       /* Flächen (Zellen) samt passender Schriftfarbe */
-      --c3bg:  #3fcbc5; --c3fg:  #0b0f14;   /* Türkis */
-      --c2bg:  #3c7c54; --c2fg:  #ffffff;   /* Dunkelgrün */
-      --c1bg:  #5be892; --c1fg:  #0b0f14;   /* Hellgrün */
+      --c3bg:  #166534; --c3fg:  #ffffff;   /* Dunkelgrün */
+      --c2bg:  #2f7d4b; --c2fg:  #ffffff;   /* Mittelgrün */
+      --c1bg:  #78c68a; --c1fg:  #0b0f14;   /* Hellgrün */
       --c0bg:  #3f3b3c; --c0fg:  #ffffff;   /* Grau */
-      --cm1bg: #f09202; --cm1fg: #0b0f14;   /* Orange */
-      --cm2bg: #dd2415; --cm2fg: #ffffff;   /* Feuerwehrrot */
-      --cm3bg: #c21ead; --cm3fg: #ffffff;   /* Lila */
+      --cm1bg: #e7a33e; --cm1fg: #0b0f14;   /* Amber */
+      --cm2bg: #c2412d; --cm2fg: #ffffff;   /* Rot */
+      --cm3bg: #881337; --cm3fg: #ffffff;   /* Dunkelrot */
 
-      /* Schrift auf dunklem Grund (Σ-Spalte, Legende) — dieselben Farbtöne,
-         aber aufgehellt, damit jede Stufe mindestens 4,5:1 gegen den
-         Seitenhintergrund erreicht. */
-      --c3:  #4ce4e8;
-      --c2:  #4b8b62;
-      --c1:  #8be5a2;
+      /* Schrift auf dunklem Grund (Σ-Spalte, Legende) */
+      --c3:  #4ade80;
+      --c2:  #63c681;
+      --c1:  #9adbaa;
       --c0:  #aaaaaa;
-      --cm1: #f69b4c;
-      --cm2: #f43602;
-      --cm3: #d95aef;
+      --cm1: #f1b85b;
+      --cm2: #f06b52;
+      --cm3: #ef5a75;
     }
 
     @keyframes fadeUp {
@@ -141,30 +128,39 @@
     /* FILTER BAR */
     .filter-bar {
       flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 6px 28px;
+      display: grid;
+      grid-template-columns: 150px 180px minmax(320px, 1fr) auto;
+      align-items: end;
+      gap: 12px 20px;
+      padding: 10px 28px 12px;
       border-bottom: 1px solid var(--border);
-      background: var(--surface);
+      background: var(--bg);
       animation: fadeUp .3s .08s ease both;
     }
-    .filter-label {
+    .filter-group > label,
+    .filter-heading {
+      display: block;
       font-family: 'DM Mono', monospace;
       font-size: 10px;
       letter-spacing: 2px;
-      color: var(--text);
+      color: var(--muted);
       text-transform: uppercase;
-      flex-shrink: 0;
+      margin-bottom: 6px;
+    }
+    .day-range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .day-input {
-      width: 50px;
+      width: 60px;
+      min-height: 40px;
       background: var(--surface2);
       border: 1px solid var(--border);
       color: var(--text);
       font-family: 'DM Mono', monospace;
       font-size: 13px;
-      padding: 6px 8px;
+      padding: 9px 10px;
       border-radius: 6px;
       outline: none;
       text-align: center;
@@ -177,27 +173,40 @@
     .day-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .filter-sep { color: var(--muted); font-size: 14px; }
     .mode-select {
+      width: 100%;
+      min-height: 40px;
       background: var(--surface2);
       border: 1px solid var(--border);
       color: var(--text);
-      font-family: 'DM Mono', monospace;
-      font-size: 9px;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      padding: 6px 10px;
-      border-radius: 5px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      padding: 9px 32px 9px 12px;
+      border-radius: 6px;
       cursor: pointer;
       outline: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237e8187'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
     }
     .mode-select:hover, .mode-select:focus { border-color: var(--accent); }
     .mode-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .filter-info {
-      margin-left: auto;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
       font-family: 'DM Mono', monospace;
       font-size: 10px;
       color: var(--muted);
+      text-align: right;
     }
-    .score-legend { display: flex; gap: 10px; margin-left: 20px; }
+    .score-legend {
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
     .legend-item {
       display: flex;
       align-items: center;
@@ -374,11 +383,19 @@
       color: var(--muted);
     }
 
+    @media (max-width: 900px) {
+      .filter-bar { grid-template-columns: 1fr 1fr; }
+      .scale-filter, .filter-info { grid-column: 1 / -1; }
+      .filter-info { justify-content: flex-start; text-align: left; }
+    }
+
     @media (max-width: 600px) {
       header { padding: 10px 16px; gap: 12px; }
       .nav { gap: 4px; }
       .nav a { font-size: 9px; padding: 8px 8px; }
-      .filter-bar { padding: 8px 16px; gap: 10px; flex-wrap: wrap; }
+      .filter-bar { grid-template-columns: 1fr; padding: 10px 16px 12px; gap: 10px; }
+      .scale-filter, .filter-info { grid-column: auto; }
+      .score-legend { flex-wrap: wrap; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -402,24 +419,34 @@
 
   <!-- FILTER BAR -->
   <div class="filter-bar">
-    <span class="filter-label">Spieltag</span>
-    <input type="number" class="day-input" id="day-from" min="1" max="34" value="1" aria-label="Erster Spieltag" />
-    <span class="filter-sep">&ndash;</span>
-    <input type="number" class="day-input" id="day-to"   min="1" max="34" value="34" aria-label="Letzter Spieltag" />
-    <select class="mode-select" id="score-mode" aria-label="Score-Modus" title="Paarung: mit eigener Angriffsstärke. Spielplan: nur die Schwierigkeit des Gegners.">
-      <option value="pair">Paarung</option>
-      <option value="fixture">Nur Spielplan</option>
-    </select>
-    <div class="score-legend">
-      <!-- Die Punkte zeigen die Flächenfarben der Zellen, nicht die Schriftrampe —
-           sonst passt die Legende nicht zu dem, was in der Tabelle steht. -->
-      <div class="legend-item"><div class="legend-dot" style="background:var(--c3bg)"></div>+3</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--c2bg)"></div>+2</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--c1bg)"></div>+1</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--c0bg);border:1px solid var(--border)"></div>0</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--cm1bg)"></div>&minus;1</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--cm2bg)"></div>&minus;2</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--cm3bg)"></div>&minus;3</div>
+    <div class="filter-group">
+      <label>Spieltag von / bis</label>
+      <div class="day-range-wrap">
+        <input type="number" class="day-input" id="day-from" min="1" max="34" value="1" aria-label="Erster Spieltag" />
+        <span class="filter-sep">&ndash;</span>
+        <input type="number" class="day-input" id="day-to" min="1" max="34" value="34" aria-label="Letzter Spieltag" />
+      </div>
+    </div>
+    <div class="filter-group">
+      <label for="score-mode">Ansicht</label>
+      <select class="mode-select" id="score-mode" title="Paarung: mit eigener Angriffsstärke. Spielplan: nur die Schwierigkeit des Gegners.">
+        <option value="pair">Paarung</option>
+        <option value="fixture">Nur Spielplan</option>
+      </select>
+    </div>
+    <div class="filter-group scale-filter">
+      <span class="filter-heading">Skala</span>
+      <div class="score-legend">
+        <!-- Die Punkte zeigen die Flächenfarben der Zellen, nicht die Schriftrampe —
+             sonst passt die Legende nicht zu dem, was in der Tabelle steht. -->
+        <div class="legend-item"><div class="legend-dot" style="background:var(--c3bg)"></div>+3</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--c2bg)"></div>+2</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--c1bg)"></div>+1</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--c0bg);border:1px solid var(--border)"></div>0</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cm1bg)"></div>&minus;1</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cm2bg)"></div>&minus;2</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cm3bg)"></div>&minus;3</div>
+      </div>
     </div>
     <div class="filter-info" id="filter-info">18 Teams &middot; 34 Spieltage</div>
   </div>

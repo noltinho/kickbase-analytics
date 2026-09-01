@@ -1,6 +1,6 @@
 """Spielermodell nach Fallunterscheidung — Ø Punkte je Einsatz.
 
-Der Vorgaenger (``player_model.py``) presst alle Spieler in *ein* Modell
+Der Forschungs-Challenger (``player_role_model.py``) presst alle Spieler in *ein* Modell
 ``p90 x Minuten je Einsatz``. Dieses hier dreht das um: es lernt
 ausschliesslich auf Spielern, die eine **normale Saison als Gesetzte**
 gespielt haben, und unterscheidet danach, was ueber den Spieler ueberhaupt

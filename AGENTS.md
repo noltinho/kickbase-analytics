@@ -26,7 +26,7 @@ Diese Datei ist die Landkarte. Ein Thema steht bewusst woanders:
 | [kbxp/](kbxp/) | Eigenständige Forschungspipeline: Spieler-ID-Crawl, historisches Panel ab 2013/14, Teamstärke-Modell, Spielermodell, Quoten-Inversion, Transfermarkt-Kaderdaten, Tests. |
 | [kbxp/src/model/player_features.py](kbxp/src/model/player_features.py) | Leakagefreier Unterbau des Spielermodells: Panel ohne Saisonendstand-Spalten und mit 90er-Minutendeckel, Kennzahlen je Spielersaison (p90, Minuten je Team-Spieltag, Start-/Joker-/Fehlquote), Teamniveaus je Saison, Kaderkonkurrenz. |
 | [kbxp/src/model/player_avg.py](kbxp/src/model/player_avg.py) | Das **fallweise** Spielermodell für beide Ligen: Zielgröße Ø Punkte je Einsatz, gelernt nur auf gesetzten Spielern, unterschieden nach dem, was über einen Spieler bekannt ist (a eigene Historie · b neue Rolle · c neu in der Liga). Beide Ligen verwenden dieselbe gemessene Struktur, aber getrennte Trainingszeilen, Teamniveaus, Koeffizienten und Kalibrierungen. Liga 1 exportiert nach `data/player_projections_avg.json`; Liga 2 nach `data/player_projections_avg_2.json` und bestimmt mangels handgepflegter Kategorien die besten acht Kandidaten je Verein mit einer vorgeschalteten Starter-Logistik. Alle Konstanten samt Messaufbau im Moduldocstring. |
-| [kbxp/src/model/player_model.py](kbxp/src/model/player_model.py) | Das Rollen-Spielermodell: `Ø Punkte je Einsatz = p90 × Minuten je Einsatz(Rolle)`, dazu die Rollenwahrscheinlichkeit als eigener Kanal. Prior-Kette statt Spielerkategorien, Torhüter-Sonderweg, Walk-forward-Backtest samt Orakel-Lauf, Export nach `data/player_projections.json`. Alle gemessenen Konstanten samt Messaufbau im Moduldocstring. |
+| [kbxp/src/model/player_role_model.py](kbxp/src/model/player_role_model.py) | Forschungs-Challenger des Rollenmodells: `Ø Punkte je Einsatz = p90 × Minuten je Einsatz(Rolle)`, dazu die Rollenwahrscheinlichkeit als eigener Kanal. Prior-Kette, Torhüter-Sonderweg und Walk-forward-Backtest samt Orakel-Lauf; kein Live-Export. `player_benchmark.py` ruft `backtest_p90()` für den gemeinsamen Vergleich auf. |
 | [kbxp/player-benchmark.md](kbxp/player-benchmark.md) | Reproduzierbarer Vergleich der Spielermodelle und ihrer Benchmarks. Enthält Messaufbau, Ergebnisgrenzen und verworfene Ansätze. |
 | [kbxp/data/processed/season_splits.parquet](kbxp/data/processed/season_splits.parquet) | Letzter Spieltag vor der **Winterpause**, je Saison und Liga — das Ende der Hinrunde ist keine feste Zahl (Bundesliga 13–17). Kickbase resettet zur Winterpause, deshalb bewertet `team_strength` nur die Spiele davor (`load_splits()` / `before_break()`). Aus den Terminlücken neu ableiten trifft 19 von 20 — 2019/20 fände man so die Corona-Pause nach Spieltag 25 statt der Winterpause nach 17. Deshalb eingecheckt statt hergeleitet. |
 
@@ -42,14 +42,14 @@ ausschließlich `data/`: `seasons.json`, `data_*.json`, `matchdays_*.json`,
 trägt nur die Forschung — `--backtest`, die Tests und die Gegenprobe der
 Quoten-Inversion. Ein Klon ohne Crawl kann `ratings.json` trotzdem bauen.
 
-**Die Spielermodelle hängen dagegen fest am Panel** und sind deshalb bewusst
-*nicht* in `fetch.py` eingehängt: `player_model.export()` und
-`player_avg.export()` brauchen `panel.parquet` und `tm_players.csv`. Das Panel
-liegt für reproduzierbare Tests im Repo, die gecrawlte Transfermarkt-Datei
-bewusst nicht. Ein weicher Import würde die Garantie oben still
-aushöhlen. Stattdessen je ein eigenes Kommando. `scatter.html` liest nur die
-fallweise Ausgabe und behandelt sie als optional (404 → der Knopf bleibt aus);
-die Rollenmodell-Ausgabe bleibt für Forschung und Vergleich erhalten.
+**Die Spielermodelle hängen dagegen fest am Panel.** Deshalb ist
+`player_avg.export()` bewusst nicht in `fetch.py` eingehängt: Es braucht
+`panel.parquet` und `tm_players.csv`. Das Panel liegt für reproduzierbare Tests
+im Repo, die gecrawlte Transfermarkt-Datei bewusst nicht. Ein weicher Import
+würde die Garantie oben still aushöhlen. `scatter.html` behandelt die fallweise
+Ausgabe als optional (404 → der Knopf bleibt aus). Das Rollenmodell hat keinen
+Live-Export mehr und läuft ausschließlich als Forschungs-Challenger im
+gemeinsamen Benchmark.
 
 ## Datenfluss
 
@@ -67,8 +67,8 @@ Kickbase v4 ──kbxp: enumerate_ids ─► raw/player_index ──backfill_his
                                                                             (nur Forschung, s. u.)
 
 panel.parquet + manual/tm_players.csv + manual/fine_positions.csv
-  + data/ratings.json + data/history.json ─┬─player_model─► data/player_projections.json       (Forschung/Vergleich)
-                                           └─player_avg───► data/player_projections_avg{,_2}.json ──► scatter.html
+  + data/ratings.json + data/history.json ─┬─player_role_model ─► player_benchmark (Forschung/Vergleich)
+                                           └─player_avg ────────► data/player_projections_avg{,_2}.json ──► scatter.html
 ```
 
 Drei Dinge, die man dem Quelltext sonst nur mühsam ansieht:
@@ -111,8 +111,8 @@ python -m src.ingest.backfill_history --workers 3               # Panel aufbauen
 python -m src.ingest.backfill_history --refresh                 # laufende Saison der aktuellen Kader nachziehen
 python -m src.model.team_strength                # ratings.json schreiben + Kennzahlen
 python -m src.model.team_strength --backtest     # walk-forward, aufgeschlüsselt nach Herkunft
-python -m src.model.player_model                 # player_projections.json schreiben
-python -m src.model.player_model --backtest      # walk-forward, vier Vergleichsebenen
+python -m src.model.player_role_model --backtest # Rollenmodell-Challenger, walk-forward
+python -m src.model.player_benchmark             # gemeinsamer Modellvergleich
 python -m src.model.player_avg                   # player_projections_avg.json schreiben
 python -m src.model.player_avg --backtest        # walk-forward je Fall und Mannschaftsteil
 python -m src.model.player_avg --gitter          # delta, fenster und rho gegeneinander
@@ -245,18 +245,18 @@ gepflegte Liste — das überlebt Auf- und Abstiege ohne Nacharbeit.
 
 ## Zwei Spielermodelle
 
-Seit August 2026 stehen zwei nebeneinander, weil sie verschieden gebaut sind
-und die Saison entscheiden soll, welches trifft. Sie teilen die Zielgröße
-(Ø Punkte je Einsatz) und die Datenschicht (`player_features.py`), sonst
-nichts. Beide schreiben ihre eigene Datei; `scatter.html` zeigt nur das auf
-der bedingten Zielgruppe bessere fallweise Modell.
+Seit August 2026 stehen zwei Modellansätze nebeneinander. Sie teilen die
+Zielgröße (Ø Punkte je Einsatz) und die Datenschicht (`player_features.py`),
+sonst nichts. Nur das auf der bedingten Zielgruppe bessere fallweise Modell
+schreibt eine Live-Datei für `scatter.html`; das Rollenmodell bleibt ein
+Forschungs-Challenger im gemeinsamen Benchmark.
 
-| | **Rollenmodell** (`player_model.py`) | **fallweise** (`player_avg.py`) |
+| | **Rollenmodell** (`player_role_model.py`) | **fallweise** (`player_avg.py`) |
 |---|---|---|
 | Aufbau | ein Modell für alle: p90 × Minuten je Einsatz | drei Fälle, je eigene Koeffizienten |
 | gelernt auf | allen bewertbaren Spielersaisons | nur gesetzten Spielern (≥ 15 Startelfeinsätze) |
-| Umfang | alle Kategorien außer 5 (326 Spieler) | Kategorie 1–2 (142 Spieler) |
-| Ausgabe | `xp_erwartet` und `xp_gesetzt` | eine Zahl, `xp` |
+| Umfang | alle bewertbaren historischen Spielersaisons | Kategorie 1–2 (142 Spieler) |
+| Ausgabe | OOF-Zeilen für Benchmark und Diagnostik | Live-Prognose `xp` |
 | Güte | r 0,618 · MAE 23,1 (alle bewertbaren) | r 0,684 · MAE 16,7 (Starter) |
 
 Die beiden r-Werte der Tabelle sind **nicht** vergleichbar: sie stehen auf
@@ -289,10 +289,10 @@ Saisons und je Fall abgezogen. Dass das Fenster **wächst** statt zu rollen, ist
 kein Detail: die Saisonverzerrung ist nicht autokorreliert (r(t, t−1) = −0,016),
 ein rollendes Fenster jagt also Rauschen und macht alles schlechter.
 
-Beim Rollenmodell greift der Versatz **nur bei Kategorie 1–2**, und das ist der
-Kern der Sache. Über alle Kandidaten gemittelt ist es unverzerrt; bedingt
-darauf, dass ein Spieler tatsächlich gesetzt ist, liegt es systematisch zu
-tief. Dieselbe ex-ante-Gruppe nach Ausgang getrennt (Fall b):
+Beim Rollenmodell wird im Benchmark ausschließlich die bedingte Prognose für
+tatsächlich gesetzte Spieler verglichen. Über alle Kandidaten gemittelt ist es
+unverzerrt; bedingt auf diese Zielgruppe liegt es roh systematisch zu tief.
+Dieselbe historische ex-ante-Gruppe nach Ausgang getrennt (Fall b):
 
 | | n | Verzerrung |
 |---|---|---|
@@ -300,9 +300,8 @@ tief. Dieselbe ex-ante-Gruppe nach Ausgang getrennt (Fall b):
 | die Starter wurden | 351 | −8,4 |
 | die übrigen | 425 | +19,2 |
 
-Ein Versatz über den ganzen Export wäre also falsch herum. Nach der ersten
-Zeile fragt aber genau der Kaderbau, und die Kaderpflege nennt diese Spieler
-vorab — deshalb ist die Eichung auf sie zulässig und nur auf sie.
+Eine pauschale Eichung über alle Spieler wäre also falsch herum. Der gemeinsame
+Benchmark eicht und bewertet deshalb auf seiner erklärten Starter-Zielgruppe.
 
 **Dass der Mittelwert beider Modelle beide schlägt, bleibt der eigentliche
 Befund**: ihre Fehler sind nur teilweise korreliert, sie tragen also
@@ -477,16 +476,6 @@ unterschätzte Randspieler um 16,1. Die Übergangsmatrix ist die Antwort:
 `minje = Σ_r P(Rolle = r) × Tabelle[Position, r]` — dieselbe Logik wie in der
 Prior-Kette, nur auf Rollen angewandt.
 
-**Die Kategorie setzt die Basisrate, das Modell verfeinert innerhalb.** Die
-`kategorie` 1–5 ist eine Rollen-Hierarchie im Kader (1 = unumstrittener
-Stammspieler … 5 = Reserve), keine Einsatzzeit. Sie muss **nicht** feiner
-gepflegt werden: innerhalb einer Kategorie trennt das Modell von 9,1 % bis
-33,2 % Durchsetzungswahrscheinlichkeit, allein aus Marktwert-Rang im Kader,
-Vorsaison-Startquote, Konkurrenz und Alter. Die Zuordnung Kategorie →
-Rollenverteilung (`KATEGORIE_ROLLEN`) ist **gesetzt, nicht gemessen** — es
-gibt sie nur für 2026/27. Backtestbar ist die Struktur (Vorsaison-Rolle als
-Eingang) und die obere Schranke (Orakel).
-
 **Gemessen wird auf der Zielgruppe, nicht auf dem Kader.** Ein Kader besteht
 zu rund einem Drittel aus Spielern, die normalerweise nicht spielen. Ein r
 über alle bewertbaren Spielersaisons misst damit zum guten Teil, wie gut man
@@ -502,20 +491,6 @@ bekannten Größen: Vorjahres-Startquote > 0,70 **und** Marktwert-Rang ≤ 2 auf
 der Position. Gegen die echten Kategorien 2026/27 geprüft trifft er den Anteil
 (28 % gegen 31 %) bei 56 % Präzision — mehr ist ohne die Handarbeit nicht zu
 holen, und genau das macht die Handarbeit wertvoll.
-
-**Kategorie 5 wird nicht prognostiziert** (im Export 2026/27: 140 von 466).
-Wer normalerweise nicht spielt, bekommt keine Zahl. Ein verschwindend kleiner
-Teil bricht durch, aber *welcher*, ist vorab nicht bekannt — ihnen allen ein
-paar Punkte zuzuschreiben erzeugt eine Zahl, wo keine Information ist. Wer in
-`fine_positions.csv` gar keine Kategorie trägt, bleibt drin: nicht eingetragen
-heißt nicht „Reserve".
-
-**Zwei Zahlen je Spieler, und das ist der Zweck:** `xp_erwartet` (mit der
-Rollenwahrscheinlichkeit gewichtet — die ehrliche Bewertung) und `xp_gesetzt`
-(Ertrag, wenn die Rolle hält — das Aufwärtspotenzial). Wer bei niedrigem Preis
-weit auseinanderliegt, ist ein Spieler, dessen Risiko der Markt zu hoch
-einpreist. Beide Werte bleiben im Export für Forschung und Vergleich erhalten,
-werden aber nicht mehr als x-Modi in `scatter.html` angezeigt.
 
 **Torhüter sind ein Sonderweg, kein eigenes Modul.** Sie mischen gegen die
 Team*abwehr* statt gegen den Angriff. Mehr als eine bessere Niveau-Eichung ist
@@ -575,14 +550,14 @@ python -m http.server 8000    # dann http://localhost:8000/index.html
 ## Offene Punkte
 
 - **Der Rollenkanal ist der Hebel, und er ist erst zur Hälfte gehoben.** Das
-  Orakel (Rolle bekannt) erreicht r 0,779, das Modell aus der Vorsaison-Rolle
-  0,606. Wie viel `fine_positions.csv` davon einlöst, ist erst nach einigen
-  Spieltagen messbar — und dann sollte `KATEGORIE_ROLLEN` aus den Daten
-  geschätzt statt gesetzt werden.
-- **Ungenutzt für die Rolle:** der Marktwert-*Verlauf* aus `history.json` und
-  `tm_marktwerte.jsonl` — ein steigender Marktwert im Sommer ist ein
-  Rollen-Signal — sowie die Verletzungsquote, die heute nur die Zielsaison
-  sieht.
+  Orakel (Rolle bekannt) erreicht r 0,779, der Forschungs-Challenger aus der
+  Vorsaison-Rolle 0,606. Vor einer erneuten Produktion müsste eine belastbare,
+  vor Saisonbeginn bekannte Rollenquelle diesen Abstand im Walk-forward
+  nachweislich schließen.
+- **Ungenutzt für den Rollen-Challenger:** der Marktwert-*Verlauf* aus
+  `history.json` und `tm_marktwerte.jsonl` — ein steigender Marktwert im Sommer
+  könnte ein Rollen-Signal sein. Das gehört zuerst in den Benchmark, nicht in
+  einen neuen Live-Export.
 - **Das Vorsaison-Gewicht der Teamstärke datenabhängig** statt fest 0,30 —
   der Einbruch liegt an Spieltag 2–4, nicht an Spieltag 1.
 - **Positionsspezifische Gegnerbewertung** — ein Spielplan ist für

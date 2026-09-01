@@ -50,8 +50,7 @@ def test_projection_exports_match_current_manifest() -> None:
     manifest = _json(DATA / "seasons.json")
     current = next(s["title"] for s in manifest["seasons"]
                    if s["key"] == manifest["current"])
-    for name in ("player_projections.json", "player_projections_avg.json",
-                 "player_projections_avg_2.json"):
+    for name in ("player_projections_avg.json", "player_projections_avg_2.json"):
         doc = _json(DATA / name)
         assert doc["season"] == current
         assert doc["players"]
@@ -151,3 +150,11 @@ def test_team_tools_use_separate_seasons_and_full_matchday_range(name: str) -> N
     text = (ROOT / name).read_text(encoding="utf-8")
     assert "storedSeason(), false, true" in text
     assert "Array.from({ length: 34 }, (_, i) => i + 1)" in text
+
+
+def test_scatter_switches_archived_data_and_limits_projections_to_current_season() -> None:
+    text = (ROOT / "scatter.html").read_text(encoding="utf-8")
+    assert 'id="filter-season"' in text
+    assert "seasonInfo(season).suffix" in text
+    assert "season !== SEASONS.current" in text
+    assert "document.getElementById('btn-avgm').hidden = true" in text

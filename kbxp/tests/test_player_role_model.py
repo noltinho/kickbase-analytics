@@ -1,4 +1,4 @@
-"""Das Spielermodell gegen Leakage, gegen Baselines und gegen sich selbst.
+"""Das Rollenmodell gegen Leakage, gegen Baselines und gegen sich selbst.
 
 Vier Sorten Test:
   · **Leakage.** Die Zielgroesse darf auf keinem Weg in die Merkmale sickern.
@@ -12,24 +12,20 @@ Vier Sorten Test:
   · **Guete im Walk-forward.** Schranken knapp unter den gemessenen Werten,
     immer gegen eine explizite Baseline - eine Kennzahl ohne Vergleichslinie
     sagt nichts.
-  · **Export.** Was die Seite liest, muss vollstaendig und in sich stimmig sein.
 """
 
 from __future__ import annotations
-
-import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.paths import LEGACY_DIR, MANUAL, PROCESSED  # noqa: E402
+from src.paths import MANUAL, PROCESSED  # noqa: E402
 from src.model.player_features import (  # noqa: E402
     LEAKAGE_SPALTEN, kaderkonkurrenz, lade_panel, lade_tm, spieler_saisons,
     tm_je_spieler,
 )
-from src.model.player_model import (  # noqa: E402
+from src.model.player_role_model import (  # noqa: E402
     DELTA, K_MINJE, K_MIX, KAPPA_BL2, MIN_EINSAETZE_ZIEL,
     MIN_ZIEL, ROLLEN, TW, _auc, _kappa, backtest_p90, baseline_fit,
     baseline_wert, kontext_tabelle, merkmalszeilen, minje_fuer, p90_mischung,
@@ -446,7 +442,7 @@ def test_produkt_schlaegt_beide_einfachen_sorten(bt: pd.DataFrame) -> None:
     Team-Rating.
     """
     from src.model.team_strength import pairwise_accuracy
-    from src.model.player_model import _produkt_bt
+    from src.model.player_role_model import _produkt_bt
 
     df = bt[bt.ist_punkte.notna() & bt.ist_st.notna()].copy()
     df["pred"] = df.xp_dach * df.quote_rolle * df.ist_st
@@ -492,7 +488,7 @@ def test_torhueter_nicht_schlechter_als_fortschreiben(bt: pd.DataFrame) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Kaderkonkurrenz und Export
+# Kaderkonkurrenz
 # ---------------------------------------------------------------------------
 
 def test_kaderkonkurrenz_zaehlt_nur_ernsthafte_konkurrenten() -> None:
@@ -517,99 +513,3 @@ def test_kaderkonkurrenz_zaehlt_nur_ernsthafte_konkurrenten() -> None:
     assert np.isnan(konk.iloc[3])
     # Gleichstand zaehlt beidseitig.
     assert konk.iloc[4] == 1 and konk.iloc[5] == 1
-
-
-def test_export_ist_vollstaendig_und_stimmig(tmp_path: Path) -> None:
-    """Was scatter.html liest, muss fuer jeden prognostizierten Spieler da sein.
-
-    Zwei Gruppen sind ausdruecklich geregelt. Spieler **ohne jede Historie**
-    gehoeren dazu — gerade sie sind der Grund fuer das Modell, weil dort weder
-    Vorjahrespunkte noch Erfahrung weiterhelfen. Spieler der **Kategorie 5**
-    gehoeren nicht dazu: wer normalerweise nicht spielt, bekommt keine Zahl.
-    Ihnen allen ein paar Punkte zuzuschreiben, weil ein kleiner Teil
-    durchbricht, erzeugt eine Zahl ohne Information — welcher es ist, sagt das
-    Modell ja nicht. Sie sind zugleich ein Drittel des Kaders und zogen jede
-    ueber alle gemittelte Kennzahl nach unten.
-    """
-    if not _hat_panel() or not _hat_tm() or not (LEGACY_DIR / "ratings.json").exists():
-        pytest.skip("panel.parquet, tm_players.csv oder ratings.json fehlt")
-    from src.model.player_model import export
-
-    payload = export(tmp_path / "player_projections.json")
-    kader = json.load(open(LEGACY_DIR / "data_1.json", encoding="utf-8"))
-    ids = {str(p["id"]) for p in kader["players"]}
-
-    exportiert = set(payload["players"])
-    assert exportiert <= ids, "Export nennt Spieler, die nicht im Kader stehen"
-    assert not any(p["kategorie"] == 5 for p in payload["players"].values()),         "Kategorie 5 gehoert nicht in die Prognose"
-    fehlt = ids - exportiert
-    assert len(fehlt) == payload["ohne_prognose"]["kategorie_5"],         f"{len(fehlt)} Kaderspieler fehlen, gemeldet sind aber "         f"{payload['ohne_prognose']['kategorie_5']}"
-    assert len(exportiert) > 250, f"nur {len(exportiert)} Spieler prognostiziert"
-    assert payload["liga"] == "1" and payload["model"] == "avg-je-einsatz-v2"
-    assert payload["params"]["k"] == K_MIX and payload["params"]["k_minje"] == K_MINJE
-    assert 10 <= payload["hinrunden_spieltage"] <= 20
-    # Die gesetzten Rollenverteilungen gehoeren in die ausgelieferte Datei,
-    # nicht nur in den Quelltext - sie sind nicht backtestbar.
-    kr = payload["params"]["kategorie_rollen"]
-    assert set(kr) == {"1", "2", "3", "4", "5"} or set(kr) == {1, 2, 3, 4, 5}
-    for v in kr.values():
-        assert abs(sum(v.values()) - 1.0) < 1e-6
-
-    # Die aktuelle, handgepflegte Formation ist die Quelle fuer die Rolle.
-    # TM liefert nur die Nominalposition (z. B. Moreira FL statt ZOM) und darf
-    # sie im Live-Export nicht wieder ueberschreiben.
-    fp = pd.read_csv(MANUAL / "fine_positions.csv")
-    fp = fp[(fp.season == payload["season"]) & fp.player_id.notna()]
-    pos_map = dict(zip(fp.player_id.astype(int).astype(str), fp.position_fine))
-    for kb_id, pos in pos_map.items():
-        if kb_id in payload["players"]:
-            assert payload["players"][kb_id]["pos"] == pos, kb_id
-
-    for kb_id, p in payload["players"].items():
-        assert isinstance(kb_id, str)
-        assert {"name", "team_id", "pos", "kategorie", "p90", "minje",
-                "xp_erwartet", "xp_gesetzt", "p_rolle", "einsaetze_erwartet",
-                "streuung", "sicherheit", "n_eff", "quellen"} <= set(p)
-        assert 0 <= p["minje"] <= 90, f"{p['name']}: Minuten {p['minje']}"
-        assert 0 <= p["p90"] <= 300, f"{p['name']}: p90 {p['p90']}"
-        assert 0.0 <= p["p_rolle"] <= 1.0
-        assert 0.0 < p["sicherheit"] <= 1.0
-        assert 15 <= p["streuung"] <= 60, f"{p['name']}: Streuung"
-        assert 0 <= p["einsaetze_erwartet"] <= payload["hinrunden_spieltage"] + 0.1
-        # Das Potenzial kann nie unter der Erwartung liegen: es rechnet mit
-        # der Einsatzlaenge eines gesetzten Spielers.
-        assert p["xp_gesetzt"] >= p["xp_erwartet"] - 0.2, f"{p['name']}"
-        assert p["quellen"], f"{p['name']}: keine Quelle vermerkt"
-
-    ohne = [p for p in payload["players"].values() if "baseline" in p["quellen"]]
-    assert ohne, "kein einziger Spieler ohne Historie? Die Quellen stimmen nicht"
-    assert all(p["n_eff"] == 0 for p in ohne)
-
-
-def test_kategorie_beruehrt_nur_die_rolle(tmp_path: Path, monkeypatch) -> None:
-    """Die Handpflege wirkt ueber die Rolle - und traegt ihr Flag.
-
-    Die Kategorie ist eine Rollen-Hierarchie, keine Punktezahl. Sie darf den
-    Ertrag nur ueber die Einsatzlaenge und die Rollenwahrscheinlichkeit
-    verschieben, und jeder betroffene Spieler muss das im Quellen-Flag
-    ausweisen - sonst laesst sich auf der Seite nicht unterscheiden, was
-    gemessen und was gepflegt ist.
-    """
-    if not _hat_panel() or not _hat_tm() or not (LEGACY_DIR / "ratings.json").exists():
-        pytest.skip("panel.parquet, tm_players.csv oder ratings.json fehlt")
-    from src.model.player_model import export
-
-    payload = export(tmp_path / "a.json")
-    mit = {k: v for k, v in payload["players"].items()
-           if "kategorie" in v["quellen"]}
-    assert len(mit) > 100, "die Kaderpflege erreicht kaum jemanden"
-    # Wer ein kategorie-Flag traegt, muss auch eine Kategorie haben.
-    assert all(v["kategorie"] is not None for v in mit.values())
-    # Und die Rollenstufen muessen sich in der Einsatzerwartung abbilden.
-    je_kat = {}
-    for v in mit.values():
-        je_kat.setdefault(v["kategorie"], []).append(v["einsaetze_erwartet"])
-    schnitt = {k: sum(x) / len(x) for k, x in je_kat.items() if len(x) >= 20}
-    stufen = [schnitt[k] for k in sorted(schnitt)]
-    assert stufen == sorted(stufen, reverse=True), (
-        f"Einsatzerwartung nicht monoton in der Kategorie: {schnitt}")

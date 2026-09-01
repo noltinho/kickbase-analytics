@@ -1,5 +1,6 @@
 # Zugangsdaten
 .env
+*.env.local
 
 # Python
 venv/
@@ -15,6 +16,10 @@ __pycache__/
 .claude/
 .agents/
 node_modules/
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
 
 # Backups
 backup_*/
