@@ -1,6 +1,6 @@
 # Kickbase Tools
 
-[![CI](https://github.com/Noltinho/kickbase-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/Noltinho/kickbase-analytics/actions/workflows/ci.yml)
+[![CI](https://github.com/noltinho/kickbase-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/noltinho/kickbase-analytics/actions/workflows/ci.yml)
 
 **[▶ Live-Demo](https://noltinho.github.io/kickbase-analytics/)** — alle
 Werkzeuge laufen direkt im Browser, ohne Installation und ohne Login.
