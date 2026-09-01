@@ -590,8 +590,10 @@
   <div class="x-toggle">
     <div class="btn-group" role="group" aria-label="X-Achse">
       <button type="button" class="btn active" onclick="setX('avg')"   id="btn-avg" aria-pressed="true">Ø Punkte</button>
-      <button type="button" class="btn"        onclick="setX('total')" id="btn-total" aria-pressed="false">Ø Bereinigt</button>
-      <button type="button" class="btn"        onclick="setX('avgm')"  id="btn-avgm" aria-pressed="false" hidden>Prognose Ø</button>
+      <button type="button" class="btn"        onclick="setX('total')" id="btn-total" aria-pressed="false"
+              title="Punkteschnitt ohne Kurzeinsätze unter 40 Minuten. Gilt nur für aktuelle Stammspieler (mindestens vier der letzten fünf Einsätze über 60 Minuten) und nur, wenn der Schnitt dadurch steigt.">Ø Bereinigt</button>
+      <button type="button" class="btn"        onclick="setX('avgm')"  id="btn-avgm" aria-pressed="false" hidden
+              title="Prognostizierter Punkteschnitt je Einsatz unter der Annahme, dass der Spieler gesetzt ist (fallweises Modell). Unabhängig von den bisherigen Einsätzen dieser Saison.">Prognose Ø</button>
     </div>
   </div>
 
@@ -610,7 +612,7 @@ function esc(s) {
   }[c]));
 }
 
-const liga    = localStorage.getItem('kickbase_liga') || '1';
+const liga    = localStorage.getItem('kickbase_liga') || '2';   // wie alle übrigen Seiten
 const SEASON_STORAGE_KEY = 'kickbase_season_scatter';
 let season = new URLSearchParams(location.search).get('season')
           || localStorage.getItem(SEASON_STORAGE_KEY)
@@ -651,6 +653,12 @@ let mvMin       = 2e6;
 let mvMax       = Infinity;
 let minApps     = 0;
 let defaultMinApps = 0;
+/* Bis einschließlich diesem Spieltag ist ein Saisonschnitt zu dünn, um gegen den
+   Marktwert etwas auszusagen — zwei, drei Spiele sind Rauschen. Solange zeigt die
+   Seite die Prognose, sofern es eine gibt. Eine eigene Wahl schlägt das immer. */
+const AVGM_BIS_SPIELTAG = 5;
+let gespielteTage   = 0;
+let xModeGewaehlt   = false;   // true, sobald der Nutzer selbst umschaltet
 let teamFilter  = new Set();
 let teamPanelOpen = false;
 let searchQuery = '';
@@ -999,8 +1007,9 @@ function render() {
 }
 
 // ─── Event-Handler ─────────────────────────────────────────
-function setX(mode) {
+function setX(mode, automatisch) {
   if (mode === 'avgm' && document.getElementById('btn-avgm').hidden) return;
+  if (!automatisch) xModeGewaehlt = true;
   xMode = mode;
   for (const [id, m] of [['btn-avg', 'avg'], ['btn-total', 'total'],
                          ['btn-avgm', 'avgm']]) {
@@ -1208,7 +1217,11 @@ function ladeAvgModell(requestId) {
         const e = doc.players[p.id];
         if (e) { p.projA = e; treffer++; }
       });
-      if (treffer) document.getElementById('btn-avgm').hidden = false;
+      if (!treffer) return;
+      document.getElementById('btn-avgm').hidden = false;
+      // Früh in der Saison ist die Prognose die aussagekräftigere Voreinstellung.
+      // Erst ab AVGM_BIS_SPIELTAG trägt der gemessene Schnitt genug Einsätze.
+      if (!xModeGewaehlt && gespielteTage <= AVGM_BIS_SPIELTAG) setX('avgm', true);
     })
     .catch(() => {});
 }
@@ -1227,13 +1240,16 @@ async function loadSeasonData() {
     if (requestId !== dataRequestId) return;
 
     const leftProjectionMode = xMode === 'avgm';
+    gespielteTage  = KickbaseUtils.latestPlayedDay(data.players);
     defaultMinApps = KickbaseUtils.defaultMinAppearances(data.players);
     minApps = defaultMinApps;
     document.getElementById('min-apps').value = defaultMinApps;
     ALL_PLAYERS = processPlayers(data, COMP_NAME[liga]);
     buildTeamButtons();
     buildCleanedList();
-    if (leftProjectionMode) setX('avg');
+    // Programmatisch: Das Archiv kennt keine Prognose. Das ist keine Wahl des
+    // Nutzers und darf die Voreinstellung nicht dauerhaft abschalten.
+    if (leftProjectionMode) setX('avg', true);
     else render();
     await attachProjections(requestId);
   } finally {

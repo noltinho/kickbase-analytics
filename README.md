@@ -10,6 +10,12 @@ verdichtet Team-, Spieler- und Marktwertdaten, ein gegnerbereinigtes
 Teamstärkemodell bewertet Matchups, und fünf frameworkfreie Werkzeuge machen
 die Ergebnisse direkt im Browser nutzbar.
 
+[![Marktwert gegen prognostizierten Punkteschnitt](screenshots/marktwert-prognose.png)](https://noltinho.github.io/kickbase-analytics/scatter.html)
+
+<sub>Marktwert-Analyse: Marktwert gegen den prognostizierten Punkteschnitt je
+Einsatz (Bundesliga 2026/27). Die Prognose stammt aus dem fallweisen
+Spielermodell, R² bezieht sich auf die eingezeichnete Regression.</sub>
+
 Das Projekt verbindet Datenbeschaffung, robuste Datenmodellierung,
 Walk-forward-Evaluation und eine bewusst schlanke Visualisierung ohne
 Frontend-Buildschritt.
