@@ -2,12 +2,12 @@
 
 [![CI](https://github.com/Noltinho/kickbase-analytics/actions/workflows/ci.yml/badge.svg)](https://github.com/Noltinho/kickbase-analytics/actions/workflows/ci.yml)
 
-**[▶ Live-Demo](https://noltinho.github.io/kickbase-analytics/)** — die sechs
-Oberflächen laufen direkt im Browser, ohne Installation und ohne Login.
+**[▶ Live-Demo](https://noltinho.github.io/kickbase-analytics/)** — alle
+Werkzeuge laufen direkt im Browser, ohne Installation und ohne Login.
 
 Statische Analysewerkzeuge für Bundesliga und 2. Bundesliga: Ein Python-Fetcher
-verdichtet Spiel-, Spieler- und Marktwertdaten, ein gegnerbereinigtes
-Teamstärkemodell bewertet Matchups, und sechs frameworkfreie HTML-Seiten machen
+verdichtet Team-, Spieler- und Marktwertdaten, ein gegnerbereinigtes
+Teamstärkemodell bewertet Matchups, und fünf frameworkfreie Werkzeuge machen
 die Ergebnisse direkt im Browser nutzbar.
 
 Das Projekt verbindet Datenbeschaffung, robuste Datenmodellierung,
@@ -158,7 +158,7 @@ Zielsaisons. Aufbau, weitere Baselines und Aufschlüsselungen stehen in
 fetch.py                 Produktions-Fetcher und JSON-Exporte
 common.js                gemeinsame Saison-, Rating- und Score-Logik
 frontend-utils.js        kleine, separat testbare Frontend-Datenfunktionen
-*.html                   sechs statische Oberflächen
+*.html                   Startseite und fünf statische Werkzeuge
 data/                    veröffentlichte Anwendungsdaten und Modell-Exporte
 kbxp/src/                Ingest-, Feature- und Modellcode
 kbxp/tests/              Leakage-, Güte- und Datenvertragstests
