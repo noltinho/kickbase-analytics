@@ -23,9 +23,17 @@
 const SEASON_AGG    = 'agg';
 const SEASON_KEY    = 'kickbase_season';   // Basis; je Seite um den Dateinamen ergänzt
 const DAYS_KEY      = 'kickbase_days';     // dito, zusätzlich um die Saisonsicht
-const POS_ORDER     = [1, 2, 3, 4];
 
-const SRC_LABEL = { same: '', up: 'Aufsteiger', down: 'Absteiger', new: 'Neuling' };
+/* Namen und Kürzel aus data/*.json landen per innerHTML im Dokument. Sie sind
+   nicht von Besuchern beeinflussbar, aber ein "&" oder ein Anführungszeichen im
+   Namen würde die Zelle oder ein title-Attribut zerlegen. Gilt für Text- und
+   Attributkontext gleichermaßen; für JS-String-Kontext (onclick) reicht es
+   nicht — dort stehen deshalb nur numerische IDs und Kürzel. */
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
 
 /* ─── Saison-Manifest ───────────────────────────────────── */
 
@@ -200,24 +208,6 @@ function carrySum(cidx, teamId, entry, kind) {
   return sum;
 }
 
-/* Punkte der Spieler ohne Position — die fünfte Ablage, falls vorhanden. */
-function carryUnpositioned(cidx, teamId, entry, kind) {
-  const arr = entry[kind === 'start' ? 'start' : kind] || [];
-  return arr.length > POS_ORDER.length
-    ? carryVal(cidx, teamId, entry, kind, arr.length) : 0;
-}
-
-/* Kurzer Hinweis für Tooltips: "Aufsteiger aus 2. Bundesliga, Vorsaison ×1,59" */
-function carryNote(cidx, teamId, kind) {
-  const t = cidx && cidx.teams[teamId];
-  if (!t || t.src === 'same') return '';
-  const f = t.factor[kind].toLocaleString('de', { minimumFractionDigits: 2 });
-  const woher = t.src === 'new' ? 'ohne Vorsaison, Ligamittel'
-                                : `aus ${t.srcLeague === '1' ? 'Bundesliga' : '2. Bundesliga'}`
-                                  + (t.srcAbbr ? ` (${t.srcAbbr})` : '');
-  return `${SRC_LABEL[t.src]} ${woher} · Vorsaison ×${f}`;
-}
-
 /* ─── Achse ─────────────────────────────────────────────── */
 
 /* Spieltage der laufenden Saison, die wirklich gespielt wurden.
@@ -257,15 +247,6 @@ function hinrundeEnde(matchdays) {
     if (gap > best) { best = gap; at = days[i - 1]; }
   }
   return at;
-}
-
-/* Fällt der Spielplan aus, bleiben die Tage mit Punkten als Näherung. */
-function playedDaysFallback(rawData) {
-  const days = new Set();
-  rawData.players.forEach(p => (p.performance || []).forEach(e => {
-    if (e.points !== 0 || parseInt(e.minutes, 10) > 0) days.add(e.day);
-  }));
-  return days;
 }
 
 /* Durchgehende Achse: erst die Vorsaison (Label 'V12'), dann die laufende.

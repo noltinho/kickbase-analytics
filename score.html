@@ -624,11 +624,11 @@ function renderTable() {
     </div>
     ${rows.map((row,i) => `<div class="row">
       <div class="td col-rank">${i+1}</div>
-      <div class="td col-team">${row.abbr}</div>
+      <div class="td col-team">${esc(row.abbr)}</div>
       <div class="td col-sigma ${sigC(row.sigma, days.length)}">${row.sigma>0?'+':''}${row.sigma}</div>
       ${row.cells.map(cell => cell
         ? `<div class="td col-md"><div class="md-inner ${bgc(cell.score)}">
-             <div class="md-opp">${cell.opp}</div>
+             <div class="md-opp">${esc(cell.opp)}</div>
              <div class="md-meta"><span class="md-ha">${cell.home ? 'H' : 'A'}</span><span class="md-score">${cell.score > 0 ? '+' : ''}${cell.score}</span></div>
            </div></div>`
         : `<div class="td col-md"><div class="md-inner bg0" style="opacity:.25">

@@ -170,9 +170,9 @@ def load_credentials() -> tuple[str, str]:
                     elif key == "KICKBASE_PASSWORD" and not password:
                         password = value
     if not (email and password):
-        print("✗ Zugangsdaten fehlen: KICKBASE_EMAIL und KICKBASE_PASSWORD als")
-        print("  Umgebungsvariablen setzen oder in einer .env-Datei neben dem Skript ablegen.")
-        sys.exit(1)
+        raise RuntimeError(
+            "Zugangsdaten fehlen: KICKBASE_EMAIL und KICKBASE_PASSWORD als "
+            "Umgebungsvariablen setzen oder in einer .env-Datei neben dem Skript ablegen.")
     return email, password
 
 
@@ -213,13 +213,14 @@ class KickbaseClient:
             headers=HEADERS,
             timeout=self.timeout,
         )
+        # Werfen statt beenden: get() ruft login() auch aus Worker-Threads heraus
+        # nach, wenn das Token abläuft. Ein sys.exit dort landete als SystemExit
+        # im Future und erreichte den Hauptthread nur auf Umwegen.
         if r.status_code != 200:
-            print(f"✗ Login fehlgeschlagen: {r.status_code}")
-            sys.exit(1)
+            raise RuntimeError(f"Login fehlgeschlagen: {r.status_code}")
         token = r.json().get("tkn")
         if not token:
-            print("✗ Login lieferte kein Token (Feld 'tkn')")
-            sys.exit(1)
+            raise RuntimeError("Login lieferte kein Token (Feld 'tkn')")
         self.token = token
         print("✓ Login erfolgreich")
         return token
@@ -349,9 +350,9 @@ def season_by_key(manifest: dict, key: str) -> dict:
         if s["key"] == key:
             return s
     known = ", ".join(s["key"] for s in manifest["seasons"])
-    print(f"✗ Unbekannte Saison '{key}'. Bekannt: {known}")
-    print(f"  Neue Saisons in {DATA_DIR}\\{MANIFEST_FILE} eintragen.")
-    sys.exit(1)
+    raise RuntimeError(
+        f"Unbekannte Saison '{key}'. Bekannt: {known}. "
+        f"Neue Saisons in {DATA_DIR}\\{MANIFEST_FILE} eintragen.")
 
 
 def current_season(manifest: dict) -> dict:
@@ -1445,8 +1446,8 @@ def cmd_archive(client: KickbaseClient, manifest: dict, season_key: str,
                 workers: int, force_lineups: bool = False) -> None:
     season = season_by_key(manifest, season_key)
     if season["key"] == manifest["current"]:
-        print(f"✗ {season['title']} ist die laufende Saison — dafür 'python fetch.py' nutzen.")
-        sys.exit(1)
+        raise RuntimeError(
+            f"{season['title']} ist die laufende Saison — dafür 'python fetch.py' nutzen.")
 
     history = load_history()
 
@@ -1581,4 +1582,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Bedienfehler und abgebrochene Läufe werfen RuntimeError; nur hier wird
+    # daraus ein Exit-Code. Aus Worker-Threads reicht fut.result() sie durch.
+    try:
+        main()
+    except RuntimeError as e:
+        print(f"✗ {e}")
+        sys.exit(1)

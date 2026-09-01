@@ -1052,9 +1052,9 @@ function renderBands(rows, posStats) {
             : `niemand startete im Zeitraum auf dieser Position`)
         : `${fmt(r.byPos[pos] || 0)} Pkt`;
       const rankTxt = rank ? `Platz ${rank} von ${rows.length}` : 'kein Rang (kein Startplatz)';
-      const tip = `${r.name} · ${POS_LABEL[pos]}\n${calc}\n${rankTxt}`
+      const tip = esc(`${r.name} · ${POS_LABEL[pos]}\n${calc}\n${rankTxt}`
                 + (val !== null ? `\n${share} % vom Ligabestwert (${fmt(st.max)})` : '')
-                + (r.note ? `\n${r.note}` : '');
+                + (r.note ? `\n${r.note}` : ''));
 
       html.push(
         `<div class="band" style="--c:${POS_COLOR[pos]};--ct:${POS_TRACK[pos]}" title="${tip}">` +
@@ -1069,12 +1069,12 @@ function renderBands(rows, posStats) {
   // Fußzeile: Tabellenplatz + Team-Kürzel
   html.push('<div class="band-label"></div>');
   rows.forEach(r => {
-    const tip = `${r.name} · Platz ${r.place}\n${r.ligaPts} Ligapunkte · ${r.games} Spiele\n${r.gf}:${r.ga} Tore (${r.gd > 0 ? '+' : ''}${r.gd})`
-              + (r.note ? `\n${r.note}` : '');
+    const tip = esc(`${r.name} · Platz ${r.place}\n${r.ligaPts} Ligapunkte · ${r.games} Spiele\n${r.gf}:${r.ga} Tore (${r.gd > 0 ? '+' : ''}${r.gd})`
+              + (r.note ? `\n${r.note}` : ''));
     html.push(
       `<div class="band-foot${r.place === 1 ? ' champ' : ''}" title="${tip}">` +
         `<span class="foot-rank">${r.place}.</span>` +
-        `<span class="foot-team">${r.name}${r.note ? '*' : ''}</span>` +
+        `<span class="foot-team">${esc(r.name)}${r.note ? '*' : ''}</span>` +
       `</div>`
     );
   });
@@ -1107,7 +1107,7 @@ function renderTable(rows, posStats) {
     }).join('');
     return `<tr>
       <td><span class="rank">${r.place}</span></td>
-      <td><span class="team-name" title="${r.note}">${r.name}${r.note ? '*' : ''}</span></td>
+      <td><span class="team-name" title="${esc(r.note)}">${esc(r.name)}${r.note ? '*' : ''}</span></td>
       <td>${fmt(metric(r, 'total'))}</td>
       ${cells}
       <td>${r.games}</td>

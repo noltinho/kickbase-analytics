@@ -539,7 +539,7 @@ function renderGrid() {
     .sort((a,b) => rawData.teams[a].localeCompare(rawData.teams[b]));
 
   grid.innerHTML = ids.map(id => {
-    const abbr = rawData.teams[id];
+    const abbr = esc(rawData.teams[id]);   // nur Anzeige und aria-label; onclick nutzt id
     const hs = currentScores[id].home;
     const as = currentScores[id].away;
     return `<div class="tscard" data-id="${id}">
@@ -689,7 +689,7 @@ function renderStandings(matchdaysData, mode, containerId) {
       <tbody>
         ${rows.map((r, i) => `<tr>
           <td>${i + 1}</td>
-          <td>${r.abbr}</td>
+          <td>${esc(r.abbr)}</td>
           <td>${r.sp}</td>
           <td>${r.s}</td>
           <td>${r.u}</td>

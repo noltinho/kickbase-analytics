@@ -889,7 +889,7 @@ function renderTable(rows) {
       <td><span class="rank">${i+1}</span></td>
       <td>
         <div class="bar-inline">
-          <span class="team-name" title="${r.note}">${r.name}${r.note ? '*' : ''}</span>
+          <span class="team-name" title="${esc(r.note)}">${esc(r.name)}${r.note ? '*' : ''}</span>
           <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
           <span style="font-family:'DM Mono',monospace;font-size:12px;">${val.toLocaleString('de')}</span>
         </div>

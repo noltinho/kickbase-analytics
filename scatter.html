@@ -601,6 +601,15 @@ const POSITION_LABEL = { 1: 'Tor', 2: 'Abwehr', 3: 'Mittelfeld', 4: 'Sturm' };
 const TREND_LABEL    = { 0: '=', 1: '↓', 2: '↑' };
 const SYMBOL         = { 'Bundesliga': 'circle', '2. Bundesliga': 'diamond' };
 
+/* Wie esc() in common.js — diese Seite bindet common.js nicht ein. Spielernamen
+   aus data/*.json gehen per innerHTML ins Dokument; ein "&" oder Anführungszeichen
+   im Namen würde die Karte zerlegen. Nicht für JS-String-Kontext geeignet. */
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 const liga    = localStorage.getItem('kickbase_liga') || '1';
 const SEASON_STORAGE_KEY = 'kickbase_season_scatter';
 let season = new URLSearchParams(location.search).get('season')
@@ -829,8 +838,8 @@ function buildTraces(players, combined, activeReg) {
           `<br>`
         : `<span style="color:#7e8187">Ø Punkte</span>  ${p.avg_pts} Pkt<br>` +
           `<span style="color:#7e8187">Ø Bereinigt</span>  ${p.cleaned_avg_pts} Pkt<br>`;
-      return `<b style="color:#dee4ec">${p.name}</b>  <span style="color:#7e8187">${p.team}</span><br>` +
-        `<span style="color:#7e8187">Position</span>  ${p.position}` +
+      return `<b style="color:#dee4ec">${esc(p.name)}</b>  <span style="color:#7e8187">${esc(p.team)}</span><br>` +
+        `<span style="color:#7e8187">Position</span>  ${esc(p.position)}` +
         (istAvgM() ? '<br>'
           : `  <span style="color:#7e8187">Einsätze</span>  ${p.appearances}<br>`) +
         `<span style="color:#7e8187">Marktwert</span>  ${fmt(p.mv)} ${p.mv_trend}<br>` +
@@ -1075,8 +1084,8 @@ function updateSearchPanel(players, combined, reg) {
       : `<div class="search-card-row"><span>Ø Punkte</span><span>${p.avg_pts}</span></div>
          <div class="search-card-row"><span>Ø Bereinigt</span><span>${p.cleaned_avg_pts}</span></div>`;
     return `<div class="search-card">
-      <div class="search-card-name">${p.name}</div>
-      <div class="search-card-team">${p.team} · ${p.position}</div>
+      <div class="search-card-name">${esc(p.name)}</div>
+      <div class="search-card-team">${esc(p.team)} · ${esc(p.position)}</div>
       ${istAvgM() ? '' : `<div class="search-card-row"><span>Einsätze</span><span>${p.appearances}</span></div>`}
       <div class="search-card-row"><span>Marktwert</span><span>${fmt(p.mv)} ${p.mv_trend}</span></div>
       <div class="search-card-row"><span>Modellwert</span><span>${fmt(modellwert)} <span style="color:${deltaColor}">${fmtDev(delta)}</span></span></div>
@@ -1100,8 +1109,8 @@ function buildCleanedList() {
     const delta = (p.cleaned_avg_pts - p.avg_pts).toFixed(1);
     return `<div class="cleaned-row">
       <div>
-        <div class="cleaned-name">${p.name}</div>
-        <div class="cleaned-team">${p.team}</div>
+        <div class="cleaned-name">${esc(p.name)}</div>
+        <div class="cleaned-team">${esc(p.team)}</div>
       </div>
       <div class="cleaned-val">${p.avg_pts}</div>
       <div class="cleaned-val">${p.cleaned_avg_pts}</div>
@@ -1121,7 +1130,7 @@ function buildTeamButtons() {
   const teams = [...new Set(ALL_PLAYERS.map(p => p.team))].sort();
   teamFilter = new Set(teams);
   document.getElementById('team-panel').innerHTML = teams.map(t =>
-    `<button type="button" class="btn active" id="team-${t}" onclick="toggleTeam('${t}')" aria-pressed="true">${t}</button>`
+    `<button type="button" class="btn active" id="team-${t}" onclick="toggleTeam('${t}')" aria-pressed="true">${esc(t)}</button>`
   ).join('');
   updateTeamTrigger();
 }
