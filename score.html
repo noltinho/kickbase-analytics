@@ -522,10 +522,19 @@ async function boot() {
     const currentDay = matchdays.matchdays.reduce((max, md) =>
       md.matches.some(m => m.st === 2) ? Math.max(max, md.day) : max, 0);
     const dayFrom    = Math.min(currentDay + 1, totalDays);
+    const standardTo = dayFrom > hinrunde ? totalDays : hinrunde;
     const stored     = storedDayRange(currentSeason().key);
-    document.getElementById('day-from').value = stored ? stored.from : dayFrom;
-    document.getElementById('day-to').value   = stored ? stored.to
-                                             : (dayFrom > hinrunde ? totalDays : hinrunde);
+    /* Das gespeicherte Fenster bleibt erhalten, rutscht aber mit dem Spielplan
+       mit: Ein Ranking für kommende Spieltage darf nicht bei längst gespielten
+       beginnen, sonst verwässern bekannte Ergebnisse das Bild — still, ohne
+       Hinweis. Liegt das Fenster komplett hinter dem aktuellen Spieltag, gilt
+       wieder die Vorbelegung. Ein Rückblick von Hand bleibt jederzeit möglich;
+       er überlebt nur kein Neuladen, und das ist der Zweck. */
+    const veraltet = stored && stored.to < dayFrom;
+    const from = stored && !veraltet ? Math.max(stored.from, dayFrom) : dayFrom;
+    const to   = stored && !veraltet ? stored.to : standardTo;
+    document.getElementById('day-from').value = from;
+    document.getElementById('day-to').value   = to;
     gespielteTage = playedDays(matchdays).size;
 
     ratings = await loadRatings();
