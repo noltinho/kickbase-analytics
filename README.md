@@ -6,6 +6,10 @@
 Analysewerkzeuge für Bundesliga und 2. Bundesliga, direkt im Browser, ohne
 Installation und ohne Login.
 
+Für den Desktop entworfen: Die Spielplanraster und Streudiagramme brauchen
+Breite. Auf dem Telefon sind sie nutzbar und lassen sich seitlich scrollen, am
+größeren Bildschirm sind sie zu Hause.
+
 ## Das Problem
 
 Im Kickbase-Manager entscheidet der Marktwert. Er ist die einzige Zahl, die
