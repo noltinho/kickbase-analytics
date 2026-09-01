@@ -457,6 +457,58 @@
     min-height: 32px;
   }
 
+  /* ─── ERKLÄRBLASE AN DEN MODUS-SCHALTERN ──────────────────
+     Ersetzt den nativen title: der kommt erst nach rund einer Sekunde, wird
+     vom Betriebssystem gestaltet und existiert auf Touch nicht. Die Blase
+     öffnet nach oben, weil die Schalter unter dem Diagramm sitzen. Sie ist
+     Zusatz, nicht Träger der Bedeutung — die steht im Achsentitel. */
+  .tip { position: relative; }
+
+  .tip::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: min(320px, 80vw);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 11px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 300;
+    line-height: 1.45;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: left;
+    white-space: normal;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  .tip:hover::after,
+  .tip:focus-visible::after { opacity: 1; visibility: visible; }
+
+  @media (prefers-reduced-motion: reduce) { .tip::after { transition: none; } }
+
+  /* Nur für Vorlesesoftware — die Blase selbst ist reines CSS und für sie
+     unsichtbar. */
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0; border: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
   /* ─── R² BADGE ────────────────────────────────────────── */
   #r2-badge {
     position: absolute;
@@ -590,11 +642,15 @@
   <div class="x-toggle">
     <div class="btn-group" role="group" aria-label="X-Achse">
       <button type="button" class="btn active" onclick="setX('avg')"   id="btn-avg" aria-pressed="true">Ø Punkte</button>
-      <button type="button" class="btn"        onclick="setX('total')" id="btn-total" aria-pressed="false"
-              title="Punkteschnitt ohne Kurzeinsätze unter 40 Minuten. Gilt nur für aktuelle Stammspieler (mindestens vier der letzten fünf Einsätze über 60 Minuten) und nur, wenn der Schnitt dadurch steigt.">Ø Bereinigt</button>
-      <button type="button" class="btn"        onclick="setX('avgm')"  id="btn-avgm" aria-pressed="false" hidden
-              title="Prognostizierter Punkteschnitt je Einsatz unter der Annahme, dass der Spieler gesetzt ist (fallweises Modell). Unabhängig von den bisherigen Einsätzen dieser Saison.">Prognose Ø</button>
+      <button type="button" class="btn tip"    onclick="setX('total')" id="btn-total" aria-pressed="false"
+              aria-describedby="tip-total"
+              data-tip="Punkteschnitt ohne Kurzeinsätze unter 40 Minuten. Gilt nur für aktuelle Stammspieler — mindestens vier der letzten fünf Einsätze über 60 Minuten — und nur, wenn der Schnitt dadurch steigt.">Ø Bereinigt</button>
+      <button type="button" class="btn tip"    onclick="setX('avgm')"  id="btn-avgm" aria-pressed="false" hidden
+              aria-describedby="tip-avgm"
+              data-tip="Prognostizierter Punkteschnitt je Einsatz unter der Annahme, dass der Spieler gesetzt ist (fallweises Modell). Unabhängig von den bisherigen Einsätzen dieser Saison.">Prognose Ø</button>
     </div>
+    <span id="tip-total" class="sr-only">Punkteschnitt ohne Kurzeinsätze unter 40 Minuten. Gilt nur für aktuelle Stammspieler — mindestens vier der letzten fünf Einsätze über 60 Minuten — und nur, wenn der Schnitt dadurch steigt.</span>
+    <span id="tip-avgm" class="sr-only">Prognostizierter Punkteschnitt je Einsatz unter der Annahme, dass der Spieler gesetzt ist (fallweises Modell). Unabhängig von den bisherigen Einsätzen dieser Saison.</span>
   </div>
 
 </div>
@@ -698,7 +754,7 @@ function stdDev(arr) {
 // ─── Filter ────────────────────────────────────────────────
 const X_TITEL = {
   avg:   'Ø PUNKTE JE EINSATZ',
-  total: 'Ø BEREINIGT JE EINSATZ',
+  total: 'Ø BEREINIGT: OHNE KURZEINSÄTZE UNTER 40 MIN, NUR STAMMSPIELER',
   avgm:  'PROGNOSE Ø: Ø PUNKTE JE EINSATZ, GESUND UND GESETZT',
 };
 
