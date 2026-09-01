@@ -631,8 +631,12 @@ let useAvg = false;
 async function boot() {
   liga = localStorage.getItem('kickbase_liga') || '2';
   await loadSeasonManifest();
-  season = fillSeasonSelect(document.getElementById('filter-season'), storedSeason(), false, true);
-  saveSeason(season);
+  // Nur eine eigene Wahl wird festgeschrieben. Eine automatisch vorbelegte
+  // Vorsaison bleibt vorläufig und wird beim nächsten Aufruf neu entschieden.
+  const eigeneWahl = hatEigeneSaisonwahl();
+  season = fillSeasonSelect(document.getElementById('filter-season'),
+                            await defaultSeason(liga), false, true);
+  if (eigeneWahl) saveSeason(season);
   await loadSeason();
 }
 

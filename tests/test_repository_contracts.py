@@ -250,7 +250,12 @@ def test_relative_document_links_stay_inside_repository() -> None:
 @pytest.mark.parametrize("name", ["teampunkte.html", "matchup.html"])
 def test_team_tools_use_separate_seasons_and_full_matchday_range(name: str) -> None:
     text = (ROOT / name).read_text(encoding="utf-8")
-    assert "storedSeason(), false, true" in text
+    # Saison je Seite, ohne Aggregat-Eintrag; die Vorbelegung entscheidet
+    # defaultSeason() anhand der bereits gespielten Spieltage.
+    assert "await defaultSeason(liga), false, true" in text
+    # Eine automatisch vorbelegte Vorsaison darf nicht festgeschrieben werden,
+    # sonst bliebe sie auch dann stehen, wenn die laufende Saison längst traegt.
+    assert "if (eigeneWahl) saveSeason(season);" in text
     assert "Array.from({ length: 34 }, (_, i) => i + 1)" in text
 
 

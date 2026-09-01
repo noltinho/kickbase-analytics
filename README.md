@@ -42,7 +42,8 @@ Jede Oberfläche beantwortet genau eine Frage.
 gegnerbereinigten Teamstärkemodell abgeleitet (Bundesliga 2026/27, Spieltage 2
 bis 6). Zu sehen ist die reine Gegnerstärke; die Paarungsstärke lässt sich
 umschalten. Voreingestellt ist der Zeitraum vom nächsten Spieltag bis zum Ende
-der Hinrunde — der Horizont, über den ein Kader geplant wird.</sub>
+der Hinrunde — der Horizont, über den ein Kader geplant wird. Für dieses Bild
+ist er auf fünf Spieltage gekürzt, damit das Raster lesbar bleibt.</sub>
 
 ### Gegen wen lohnt sich welche Position?
 

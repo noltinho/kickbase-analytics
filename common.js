@@ -96,6 +96,32 @@ function saveSeason(key) {
   localStorage.setItem(seasonStorageKey(), key);
 }
 
+/* Zu Saisonbeginn ist die laufende Saison zu dünn für eine Auswertung: Nach
+   zwei, drei Spieltagen sagt ein Teamschnitt wenig über eine Mannschaft. Ohne
+   eigene Wahl zeigen die Auswertungsseiten deshalb zunächst die abgeschlossene
+   Vorsaison und wechseln von selbst zurück, sobald genug gespielt ist — wie die
+   Prognose-Vorbelegung in scatter.html. Eine eigene Wahl schlägt die Automatik;
+   deshalb darf das Ergebnis auch nicht gespeichert werden, sonst fröre der
+   erste Seitenaufruf die Vorsaison für den Rest des Jahres ein. */
+const VORSAISON_BIS_SPIELTAG = 5;
+
+function hatEigeneSaisonwahl() {
+  return new URLSearchParams(location.search).get('season') !== null
+      || localStorage.getItem(seasonStorageKey()) !== null
+      || localStorage.getItem(SEASON_KEY) !== null;
+}
+
+async function defaultSeason(liga) {
+  const prev = prevSeason();
+  if (hatEigeneSaisonwahl() || !prev) return storedSeason();
+  try {
+    const plan = await fetchJson(
+      `data/matchdays_bl${liga}${currentSeason().suffix}.json`);
+    if (playedDays(plan).size <= VORSAISON_BIS_SPIELTAG) return prev.key;
+  } catch (e) { /* ohne Spielplan bleibt es bei der bisherigen Vorbelegung */ }
+  return storedSeason();
+}
+
 /* ─── Spieltagsfenster merken ────────────────────────────────
    Wie die Saison je Seite, zusätzlich aber je Saisonsicht: die Eingaben sind
    Achsen-Indizes, und in der Aggregat-Sicht ist die Achse doppelt so lang. Ein
