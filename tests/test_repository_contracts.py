@@ -46,6 +46,108 @@ def test_published_season_files_are_consistent() -> None:
                 assert all(1 <= int(e["day"]) <= 34 for e in player["performance"])
 
 
+def _published_leagues():
+    """Jede veröffentlichte Liga-/Saisonkombination als (Daten, Spielplan)."""
+    manifest = _json(DATA / "seasons.json")
+    for liga in ("1", "2"):
+        for season in manifest["seasons"]:
+            suffix = season["suffix"]
+            yield (f"data_{liga}{suffix}.json",
+                   _json(DATA / f"data_{liga}{suffix}.json"),
+                   _json(DATA / f"matchdays_bl{liga}{suffix}.json"))
+
+
+def _match_team_index(plan: dict) -> dict[tuple[int, str, bool], str]:
+    """Spieltag + Gegner + Heimflag -> Verein, für den der Spieler auflief.
+
+    Dieselbe Auflösung wie ``teamOf`` in teampunkte.html.
+    """
+    index: dict[tuple[int, str, bool], str] = {}
+    for md in plan["matchdays"]:
+        for m in md["matches"]:
+            index[(m["day"], str(m["t2"]), True)] = str(m["t1"])
+            index[(m["day"], str(m["t1"]), False)] = str(m["t2"])
+    return index
+
+
+def test_matchday_team_resolves_from_schedule_without_fallback() -> None:
+    """Der Verein eines Spielers am Spieltag muss aus dem Spielplan folgen.
+
+    Die Archivdateien führen keinen Verein je Spieltag, nur den Kader-Snapshot
+    am Saisonende. Wer im Winter innerhalb der Liga wechselt, bekäme damit
+    seine gesamten Punkte beim letzten Verein gutgeschrieben. Das Frontend löst
+    stattdessen über Gegner und Spielort auf; greift dort der Rückfall auf
+    ``team_id``, wären die Teamsummen still falsch.
+    """
+    for name, data, plan in _published_leagues():
+        index = _match_team_index(plan)
+        for player in data["players"]:
+            for e in player["performance"]:
+                key = (e["day"], str(e["opponent"]), bool(e["home"]))
+                assert key in index, (
+                    f"{name}: {player['name']} an ST {e['day']} gegen "
+                    f"{e['opponent']} findet keine Partie im Spielplan")
+                # Wo der Fetcher den Verein mitliefert (laufende Saison), muss er
+                # mit der Ableitung übereinstimmen — zwei unabhängige Quellen.
+                if "team" in e:
+                    assert str(e["team"]) == index[key], (
+                        f"{name}: {player['name']} an ST {e['day']} — Datei sagt "
+                        f"{e['team']}, Spielplan sagt {index[key]}")
+
+
+def test_scored_and_conceded_points_reconcile() -> None:
+    """Erzielte und zugelassene Punkte sind zwei Sichten auf dieselben Daten.
+
+    teampunkte.html bucht über den aufgelösten Verein, matchup.html über
+    ``entry.opponent``. Beide Wege müssen je Team und Spieltag dasselbe ergeben.
+
+    Was das prüft und was nicht: Der Abgleich deckt Widersprüche zwischen
+    Spielplan und Spieltagsdaten auf — etwa ein gekipptes Heimflag, das den
+    Eintrag der falschen Mannschaft zuschlägt. Für die Punktwerte selbst ist er
+    tautologisch, weil derselbe Eintrag beide Seiten speist; eine unabhängige
+    Quelle für Kickbase-Punkte gibt es im Repository nicht. Symmetrischen
+    Datenverlust — eine ganze Mannschaft fehlt — würde er ebenfalls überstehen,
+    deshalb steht die Belegungsprüfung darunter.
+    """
+    for name, data, plan in _published_leagues():
+        index = _match_team_index(plan)
+        gegner = {}
+        gespielt = []
+        for md in plan["matchdays"]:
+            for m in md["matches"]:
+                gegner[(m["day"], str(m["t1"]))] = str(m["t2"])
+                gegner[(m["day"], str(m["t2"]))] = str(m["t1"])
+                if m.get("st") == 2:
+                    gespielt.append((m["day"], str(m["t1"]), str(m["t2"])))
+
+        erzielt: dict[tuple[int, str], int] = {}
+        zugelassen: dict[tuple[int, str], int] = {}
+        belegt: set[tuple[int, str]] = set()
+        for player in data["players"]:
+            for e in player["performance"]:
+                team = index[(e["day"], str(e["opponent"]), bool(e["home"]))]
+                erzielt[(e["day"], team)] = erzielt.get((e["day"], team), 0) + e["points"]
+                key = (e["day"], str(e["opponent"]))
+                zugelassen[key] = zugelassen.get(key, 0) + e["points"]
+                if int(str(e["minutes"]).rstrip("'") or 0) > 0:
+                    belegt.add((e["day"], team))
+
+        for (day, team), punkte in zugelassen.items():
+            other = gegner[(day, team)]
+            assert erzielt.get((day, other), 0) == punkte, (
+                f"{name}: ST {day} — {team} ließ {punkte} Punkte zu, "
+                f"{other} erzielte {erzielt.get((day, other), 0)}")
+        assert sum(erzielt.values()) == sum(zugelassen.values())
+
+        # Jede beendete Partie braucht auf beiden Seiten eingesetzte Spieler.
+        # Fällt eine Mannschaft aus der Datei, bleibt die Identität oben heil.
+        for day, t1, t2 in gespielt:
+            for team in (t1, t2):
+                assert (day, team) in belegt, (
+                    f"{name}: ST {day} — {team} hat keinen eingesetzten Spieler, "
+                    f"die Partie gilt aber als beendet")
+
+
 def test_projection_exports_match_current_manifest() -> None:
     manifest = _json(DATA / "seasons.json")
     current = next(s["title"] for s in manifest["seasons"]
